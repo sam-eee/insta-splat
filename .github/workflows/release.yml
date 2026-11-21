@@ -59,7 +59,7 @@ jobs:
       - name: Smoke test the built app (Linux)
         if: runner.os == 'Linux'
         run: ./dist/SphereScan hardware | tail -3
-      - name: Package (portable: the zip carries portable.txt next to the app)
+      - name: Package with portable.txt next to the app
         run: |
           printf '%s\n' "This file makes SphereScan portable: it keeps its settings in a SphereScan-data folder next to the app" "instead of your user folder, so the whole thing can live on a USB stick or any folder." "Delete this file to use SphereScan like a normal app." > dist/portable.txt
           cd dist
