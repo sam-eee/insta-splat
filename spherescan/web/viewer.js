@@ -92,7 +92,7 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
     requestAnimationFrame(loop);
   }
 
-  Viewer.prototype.resetView = function () { this.yaw = 0.6; this.pitch = 0.35; this.dist = 1.8; this.pan = [0, 0]; this.dirty = true; };
+  Viewer.prototype.resetView = function () { this.yaw = 0.6; this.pitch = 0.35; this.dist = 2.1; this.pan = [0, 0]; this.dirty = true; };
   Viewer.prototype.toggleFlip = function () { this.flip = !this.flip; this.dirty = true; };
 
   Viewer.prototype._bind = function () {
@@ -127,6 +127,7 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
 
     const mn = [1e30, 1e30, 1e30], mx = [-1e30, -1e30, -1e30], texCache = new Map();
     let tris = 0;
+    const samp = [[], [], []];                      // vertex samples, to frame the model by where most of it is
     for (const {pr, world} of prims) {
       if (pr.mode !== undefined && pr.mode !== 4) continue;
       onStatus && onStatus("Preparing the model…");
@@ -134,6 +135,8 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
       const idx = pr.indices !== undefined ? readAccessor(buf, g, pr.indices, true) : Uint32Array.from({length: pos.count}, (_, i) => i);
       const uv = pr.attributes.TEXCOORD_0 !== undefined ? readAccessor(buf, g, pr.attributes.TEXCOORD_0) : null;
       const col = pr.attributes.COLOR_0 !== undefined ? readAccessor(buf, g, pr.attributes.COLOR_0) : null;
+      const stp = Math.max(1, Math.floor(pos.count / 40000));
+      for (let i = 0; i < pos.count; i += stp) { const w = m4.pt(world, [pos.data[i*3], pos.data[i*3 + 1], pos.data[i*3 + 2]]); for (let c = 0; c < 3; c++) samp[c].push(w[c]); }
       const a = pos.acc, lo = a.min || [0, 0, 0], hi = a.max || [0, 0, 0];
       if (!a.min) { for (let i = 0; i < pos.count; i++) for (let c = 0; c < 3; c++) { const v = pos.data[i*3 + c]; lo[c] = Math.min(lo[c], v); hi[c] = Math.max(hi[c], v); } }
       for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) {
@@ -174,8 +177,13 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
     }
     gl.bindVertexArray(null);
     this.textures = [...texCache.values()];
-    this.center = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
-    this.radius = Math.max(1e-6, 0.5 * Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]));
+    // Scans leave stray floating pieces far from the subject; frame the 2nd-98th percentile, not the full box.
+    const lo98 = [0, 0, 0], hi98 = [0, 0, 0];
+    for (let c = 0; c < 3; c++) { const v = samp[c].sort((x, y) => x - y), n = v.length;
+      lo98[c] = n ? v[Math.floor(n * 0.02)] : mn[c]; hi98[c] = n ? v[Math.min(n - 1, Math.floor(n * 0.98))] : mx[c]; }
+    this.center = [(lo98[0] + hi98[0]) / 2, (lo98[1] + hi98[1]) / 2, (lo98[2] + hi98[2]) / 2];
+    this.radius = Math.max(1e-6, 0.5 * Math.hypot(hi98[0] - lo98[0], hi98[1] - lo98[1], hi98[2] - lo98[2]));
+    this.fullRadius = Math.max(this.radius, 0.5 * Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]));
     this.dirty = true;
     return {triangles: tris};
   };
@@ -188,7 +196,7 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
     if (!this.draws.length) return;
     gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.useProgram(this.prog);
     const R = this.radius, d = this.dist * R * 1.45;
-    const proj = m4.persp(0.8, w / h, Math.max(R * 0.01, d - R * 4), d + R * 4);
+    const F = this.fullRadius || R, proj = m4.persp(0.8, w / h, Math.max(R * 0.01, d - F * 1.5), d + F * 2.5);
     let view = m4.mul(m4.tr(this.pan[0] * R, this.pan[1] * R, -d), m4.mul(m4.rotX(this.pitch), m4.rotY(this.yaw)));
     if (this.flip) view = m4.mul(view, m4.rotX(Math.PI));
     view = m4.mul(view, m4.tr(-this.center[0], -this.center[1], -this.center[2]));
