@@ -62,6 +62,10 @@ elif a[:2] == ["train", "meshing"]:
         time.sleep(5)                       # the app should stop us long before this ends
         print("fake spirula: was not stopped", file=sys.stderr)
         sys.exit(9)
+    if os.environ.get("FAKE_WARN"):
+        print("Warning: training may run out of GPU memory.", flush=True)
+        import time
+        time.sleep(1.2)                     # long enough for the page to see it
     for i in (1, 5, 10):
         print(f"step {i * 1000:>6}/10000 ({i * 10:>3}%)  splats 46242  [elapsed 00:00:01 | ETA 00:00:0{10 - i}]", flush=True)
 elif a[:1] == ["mesh"]:

@@ -222,6 +222,37 @@ class Library(unittest.TestCase):
         self.assertTrue(hardware._classify("Intel(R) Graphics (MTL)", None, 32.0).integrated)
 
 
+class Health(unittest.TestCase):
+    def job(self, stage, idle, state="running"):
+        j = Job(captures=[], detail_level=1, format_key="glb", out_dir="x", hw=fake_hw())
+        j.state, j.stage, j.last_output = state, stage, time.time() - idle
+        return j
+
+    def test_a_run_that_keeps_reporting_is_ok_and_a_silent_one_is_stalled(self):
+        from spherescan.pipeline import STALL_AFTER
+        self.assertEqual(self.job("train", 10).health(), "ok")
+        self.assertEqual(self.job("train", STALL_AFTER["train"] + 5).health(), "stalled")
+        self.assertEqual(self.job("mesh", STALL_AFTER["train"] + 5).health(), "ok")      # meshing is quieter than training
+        self.assertEqual(self.job("mesh", STALL_AFTER["mesh"] + 5).health(), "stalled")
+
+    def test_finished_runs_report_their_state_not_stall(self):
+        for st in ("done", "failed", "cancelled"):
+            self.assertEqual(self.job("train", 9999, state=st).health(), st)
+            self.assertEqual(self.job("train", 9999, state=st).idle_s(), 0.0)
+
+    def test_snapshot_carries_health_idle_and_notice(self):
+        s = self.job("train", 12).snapshot()
+        self.assertEqual(s["health"], "ok")
+        self.assertAlmostEqual(s["idle_s"], 12, delta=2)
+        self.assertEqual(s["notice"], "")
+
+    def test_page_animates_only_while_healthy_and_highlights_problems(self):
+        html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
+        for needle in ("prefers-reduced-motion", 'id="alert"', 'role="alert"', "Running normally", "Lost contact with SphereScan",
+                       "No news from Spirula", "The run stopped because of a problem.", 'bar.className="run"', 'bar.className="stall"', 'bar.className="bad"'):
+            self.assertIn(needle, html)
+
+
 class Progress(unittest.TestCase):
     TRAIN = "step    601/15000 (  4%)  splats 48554  [elapsed 00:03:56.109 | ETA 02:11:54.947]  rgb_loss=0.1231"
     FORECAST = "- Projected peak: 6.23 +/- 1.40 GiB   free for training: 3.62 GiB   chance of running out: 97%."
@@ -550,6 +581,25 @@ class Pipeline(unittest.TestCase):
         self.assertTrue(any(e is not None for _, _, e in seen))
         mesh = [p for st, p, _ in seen if st == "mesh"]
         self.assertTrue(any(abs(p - 0.5) < 0.01 for p in mesh), mesh)    # read from Spirula's progress file
+
+    def test_a_spirula_warning_reaches_the_page_in_plain_words(self):
+        src = self.d / "in"
+        mp4(src / "IMG_x.insv", 30)
+        os.environ["FAKE_WARN"] = "1"
+        self.addCleanup(os.environ.pop, "FAKE_WARN", None)
+        job = Job(captures=footage.scan_folder(str(src)), detail_level=1, format_key="glb",
+                  out_dir=str(self.d / "out"), hw=fake_hw())
+        notes = []
+        orig = job.snapshot
+        job.snapshot = lambda: (notes.append(job.notice), orig())[1]
+        job.start()
+        for _ in range(300):
+            job.snapshot()
+            if job.state != "running":
+                break
+            time.sleep(0.05)
+        self.assertEqual(job.state, "done", job.message)
+        self.assertTrue(any("graphics card may run out of memory" in n for n in notes), set(notes))
 
     def test_dry_run_prints_commands_and_runs_nothing(self):
         src = self.d / "in"

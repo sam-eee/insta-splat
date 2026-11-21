@@ -47,7 +47,19 @@ tr.dis td{color:var(--mute)}
 select,input[type=text]{font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
 .go{width:100%;font-size:21px;padding:16px;margin-top:6px}
 .bar{height:14px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0}
-.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s,background-color .3s}
+.bar i.run{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.3) 0 10px,transparent 10px 20px);background-size:28px 28px;animation:slide 1s linear infinite}
+.bar i.done{background:var(--ok)}.bar i.stall{background:var(--warn)}.bar i.bad{background:var(--bad)}
+@keyframes slide{to{background-position:28px 0}}
+.health{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--mute);margin:2px 0 6px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:none}
+.dot.live{animation:pulse 1.4s ease-in-out infinite}
+.dot.stall{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.idle{background:var(--mute)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+.alert{border-radius:12px;padding:12px 14px;margin:10px 0;border:2px solid var(--warn);background:var(--soft);font-size:16px}
+.alert.bad{border-color:var(--bad)}
+.alert b{display:block}
+@media (prefers-reduced-motion:reduce){.bar i.run{animation:none}.dot.live{animation:none}}
 .steps{display:flex;gap:6px;flex-wrap:wrap;font-size:15px}
 .steps span{padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute)}
 .steps span.on{color:var(--ink);border-color:var(--accent);background:var(--soft)}
@@ -99,6 +111,8 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <h2 id="ptitle">Working…</h2>
     <div class="steps" id="steps"></div>
     <div class="bar"><i id="barfill"></i></div>
+    <div class="health" id="health"><span class="dot" id="dot"></span><span id="healthtxt"></span></div>
+    <div class="alert hidden" id="alert" role="alert"><b id="alerthead"></b><span id="alertbody"></span></div>
     <div class="meta" id="pdesc"></div>
     <div class="meta" id="pmeta"></div>
     <div class="meta" id="eta"></div>
@@ -251,11 +265,49 @@ async function restore(){
 }
 const STAGES=[["extract","Reading video"],["sfm","Camera positions"],["train","3D model"],["mesh","Mesh"]];
 async function poll(){
-  if(polling)return;polling=true;try{await pollOnce()}finally{polling=false}
+  if(polling)return;polling=true;
+  let again=false;
+  try{again=await pollOnce();clearLost()}
+  catch(e){showLost();again=true;}              // the app did not answer: say so, keep trying
+  finally{polling=false}
+  if(again)setTimeout(poll,again===true&&lostNow?3000:1500);
 }
+let lostNow=false;
+function paintHealth(s){
+  const bar=$("barfill"),dot=$("dot"),txt=$("healthtxt"),al=$("alert");
+  const alert=(cls,head,body)=>{al.className="alert "+cls;$("alerthead").textContent=head;$("alertbody").textContent=body?" "+body:""};
+  al.className="alert hidden";
+  if(s.state==="running"){
+    const idle=Math.round(s.idle_s||0);
+    if(s.health==="stalled"){
+      bar.className="stall";dot.className="dot stall";txt.textContent="No news from Spirula";
+      alert("","Nothing has happened for "+hm(idle)+".","It may be stuck, or just slow on this step. You can keep waiting or press Cancel and try a lower detail level.");
+      $("cancel").classList.add("primary");
+    }else{
+      bar.className="run";dot.className="dot live";
+      txt.textContent=s.health==="ok"?`Running normally · last update ${idle<5?"just now":idle<90?idle+" s ago":hm(idle)+" ago"}`:"Running";   // only claim "normally" when the app reports liveness
+      $("cancel").classList.remove("primary");
+      if(s.notice)alert("",s.notice.startsWith("Out of")||s.notice.startsWith("Spirula expects")?"Adjusting to fit your graphics card.":"Heads up.",s.notice);
+    }
+  }else if(s.state==="done"){bar.className="done";dot.className="dot";txt.textContent="Finished";}
+  else if(s.state==="failed"){
+    bar.className="bad";dot.className="dot bad";txt.textContent="Stopped";
+    alert("bad","The run stopped because of a problem.",s.message||"");
+    document.querySelector("#prog details").open=true;
+  }
+  else{bar.className="";dot.className="dot idle";txt.textContent="Cancelled";}
+}
+function showLost(){
+  lostNow=true;
+  $("barfill").className="bad";$("dot").className="dot bad";$("healthtxt").textContent="Not connected";
+  $("alert").className="alert bad";$("alerthead").textContent="Lost contact with SphereScan.";
+  $("alertbody").textContent=" It may have been closed. If it is still running, this page reconnects by itself. If it was closed, your render stopped and any partial work is in the folder next to your footage.";
+}
+function clearLost(){lostNow=false}
 let polling=false;
 async function pollOnce(){
   const s=await api("status");
+  if(!s||!s.state)throw new Error("no status");
   const idx=STAGES.findIndex(x=>x[0]===s.stage);
   $("steps").innerHTML=STAGES.map((x,i)=>`<span class="${s.state==="done"||i<idx?"done":i===idx?"on":""}">${s.state==="done"||i<idx?"✓ ":""}${x[1]}${i===idx&&s.state==="running"?" "+Math.round(s.stage_progress*100)+"%":""}</span>`).join("");
   $("pdesc").textContent=s.desc||"";
@@ -266,12 +318,12 @@ async function pollOnce(){
   $("pmeta").textContent=`${Math.round(s.overall*100)}% overall · ${hm(s.elapsed||0)} elapsed${left}`;
   $("eta").textContent=left?"Time left is a rough estimate and may not be exact.":"";
   $("ptitle").textContent={running:"Working… you can leave this running",done:"Your 3D model is ready",failed:"That did not work",cancelled:"Cancelled"}[s.state]||"";
-  if(s.state==="running"){setTimeout(poll,1500);return}
+  paintHealth(s);
+  if(s.state==="running")return true;
   busy=false;refreshGo();$("cancel").classList.add("hidden");
   if(s.state==="done")$("eta").textContent="";
   if(s.state==="done")showViewer(s.result);
   if(s.state==="done"){$("openfile").classList.remove("hidden");$("openfolder").classList.remove("hidden");$("pmeta").textContent="Saved to "+s.result}
-  if(s.state==="failed")$("perr").textContent=s.message;
   if(s.detail_note)$("pmeta").textContent+="  "+s.detail_note;
 }
 restore();

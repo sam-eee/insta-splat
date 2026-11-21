@@ -21,6 +21,9 @@ from .presets import DETAILS, FORMATS
 from .util import IS_WINDOWS, engine_env, find_executable, popen_flags
 
 WORK_MARKER = ".spherescan-work"
+# Seconds of silence from Spirula before the run is called stalled. Mapping and meshing can be quiet
+# for minutes; training prints a line every minute or so even on slow cards.
+STALL_AFTER = {"extract": 300, "sfm": 600, "train": 300, "mesh": 600}
 _ABORTED = -999
 
 
@@ -57,6 +60,9 @@ class Job:
     detail_note: str = ""
     eta_s: Optional[float] = None
     ended: float = 0.0
+    last_output: float = 0.0
+    notice: str = ""
+    _mesh_w: float = -1.0
     _own_eta: Optional[float] = None
     _stage_t0: float = 0.0
     _predicted: dict = field(default_factory=dict)
@@ -70,6 +76,15 @@ class Job:
         self.state = "running"
         self.started = time.time()
         threading.Thread(target=self._main, daemon=True).start()
+
+    def idle_s(self) -> float:
+        return max(0.0, time.time() - self.last_output) if self.last_output and self.state == "running" else 0.0
+
+    def health(self) -> str:
+        """ok while Spirula keeps reporting; stalled once it has been silent for longer than that stage ever is."""
+        if self.state != "running":
+            return self.state
+        return "stalled" if self.idle_s() > STALL_AFTER.get(self.stage, 600) else "ok"
 
     def describe(self) -> str:
         d = DETAILS.get(self.detail_level)
@@ -86,7 +101,8 @@ class Job:
         with self._lock:
             return {"state": self.state, "stage": self.stage, "stage_label": est.STAGE_LABEL.get(self.stage, ""),
                     "stage_progress": self.stage_progress, "overall": self.overall, "message": self.message,
-                    "result": self.result, "detail_note": self.detail_note, "eta_s": self.eta_s, "eta_text": human_left(self.eta_s), "desc": self.describe(), "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
+                    "result": self.result, "detail_note": self.detail_note, "eta_s": self.eta_s, "eta_text": human_left(self.eta_s), "desc": self.describe(),
+                    "health": self.health(), "idle_s": self.idle_s(), "notice": self.notice, "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
                     "commands": self.commands if self.dry_run else []}
 
     # ---- internals ------------------------------------------------------
@@ -124,6 +140,7 @@ class Job:
             def stage(s: str):
                 self.stage, self.stage_progress = s, 0.0
                 self._own_eta, self._stage_t0 = None, time.time()
+                self.last_output, self.notice, self._mesh_w = time.time(), "", -1.0
                 done = sum(weights[x] for x in est.STAGES[:est.STAGES.index(s)])
                 self._base = (done / total_w, weights[s] / total_w, weights[s])
 
@@ -192,6 +209,7 @@ class Job:
                 step += 1
                 why = "Spirula expects to run out of graphics memory" if rc == _ABORTED else "Out of graphics memory"
                 self._say(f"{why}. Starting again with less detail (step {step}).")
+                self.notice = f"{why}. Starting again with less detail."
                 self.stage_progress, self._own_eta, self._stage_t0 = 0.0, None, time.time()
                 self.detail_note = memory.plan_at(detail, self.hw, step).note()
                 continue
@@ -276,6 +294,8 @@ class Job:
         if self.stage == "mesh" and mesh_dir:
             w = read_mesh_progress(mesh_dir)
             if w is not None:
+                if w != self._mesh_w:
+                    self._mesh_w, self.last_output = w, time.time()
                 f = max(f, w)
             else:
                 f = max(f, 0.9 * (time.time() - t0) / (time.time() - t0 + expected))   # no signal yet: slow, never a jump
@@ -313,6 +333,9 @@ class Job:
             if not line:
                 continue
             self._say(line)
+            self.last_output = time.time()
+            if line.startswith("Warning:"):
+                self.notice = _friendly_warning(line)
             parser.feed(line)
             if parser.mapping and not was_mapping:
                 was_mapping, self._map_t0 = True, time.time()
@@ -344,6 +367,13 @@ class Job:
 
 
 # ---- helpers -----------------------------------------------------------------
+
+def _friendly_warning(line: str) -> str:
+    low = line.lower()
+    if "out of gpu memory" in low or "out of memory" in low:
+        return "Spirula warns your graphics card may run out of memory. If it does, SphereScan restarts with less detail by itself."
+    return "Spirula reported a warning: " + line[len("Warning:"):].strip()[:200]
+
 
 def _q(s: str) -> str:
     return f'"{s}"' if " " in s else s
