@@ -35,7 +35,7 @@ Running from source: `python -m spherescan` with a Spirula build in `vendor/` or
 
 ## Built-in 3D viewer
 
-When a run finishes, the model appears on the same page: drag to turn, scroll or pinch to zoom, right-drag to move, **Flip upside-down** if the capture came out inverted. It is a small built-in WebGL2 viewer with no downloads or internet needed, for `.glb` (the default) with textures or vertex colours. You can also open any `.glb` you already have: press **View an existing 3D model…** at the top, or drop the file on the page. It is read by your browser and never uploaded. Other formats (OBJ, glTF, PLY, STL) are saved as usual and open in your own 3D viewer. Files using Draco or meshopt compression, or a browser or graphics driver without WebGL2, fall back to a message. Large meshes (millions of triangles) need a reasonable graphics card to turn smoothly.
+When a run finishes, the model appears on the same page: drag to turn, scroll or pinch to zoom, right-drag to move, **Flip upside-down** if the capture came out inverted. It is a small built-in WebGL2 viewer with no downloads or internet needed, for `.glb` (the default) with textures or vertex colours. You can also open any `.glb` you already have: use **Already made a model?** at the bottom of the page, or drop the file on it. It only works for models saved as GLB. It is read by your browser and never uploaded. Other formats (OBJ, glTF, PLY, STL) are saved as usual and open in your own 3D viewer. Files using Draco or meshopt compression, or a browser or graphics driver without WebGL2, fall back to a message. Large meshes (millions of triangles) need a reasonable graphics card to turn smoothly.
 
 ## Time estimates on any card (offline)
 

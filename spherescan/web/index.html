@@ -62,11 +62,6 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
   <h1>SphereScan</h1>
   <div id="hw"><span class="chip">Checking your computer…</span></div>
   <div id="problems"></div>
-  <div class="row" style="margin:0 0 4px">
-    <button id="openmodel">View an existing 3D model…</button>
-    <span class="help" style="margin:0">Already have a .glb file? Open it here, or drop it on this page.</span>
-    <input type="file" id="modelfile" accept=".glb,model/gltf-binary" hidden>
-  </div>
 
   <section class="card" id="s1">
     <h2><span class="num">1</span> Choose your footage folder</h2>
@@ -118,6 +113,12 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     </div>
     <div class="row" style="margin-top:10px"><button id="vreset">Reset view</button><button id="vflip">Flip upside-down</button></div>
     <p class="help" style="margin:8px 0 0">Drag to turn. Scroll or pinch to zoom. Right-drag or Shift-drag to move. If it looks upside-down, press Flip.</p>
+  </section>
+  <section class="card" id="openexisting">
+    <h2>Already made a model?</h2>
+    <p class="help">View a 3D model you made earlier. This only works with <b>.glb</b> files, so the model must have been saved as <b>GLB</b> (the default under "Save as" above). OBJ, glTF, PLY and STL files cannot be previewed here.</p>
+    <div class="row"><button id="openmodel">Choose a .glb file…</button><span class="path">or drop it on this page</span></div>
+    <input type="file" id="modelfile" accept=".glb,model/gltf-binary" hidden>
   </section>
   <footer class="help" style="text-align:center;margin-top:24px">
     Free software (GPLv3): SphereScan and the bundled <a href="https://github.com/harry7557558/spirula-studio" target="_blank" rel="noopener">Spirula Studio</a>.
