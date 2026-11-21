@@ -43,7 +43,7 @@ When a run finishes, the model appears on the same page: drag to turn, scroll or
 
 ## Time estimates on any card (offline)
 
-SphereScan ships a library of about 130 graphics cards and 45 CPUs (`spherescan/data/*.json`) with approximate public specs: FP32 TFLOPS, memory bandwidth, memory size. Relative speed is `(TFLOPS/12.7)^0.6 x (GB/s / 360)^0.4`, where an RTX 3060 = 1.0. It is anchored on one real measured run (RTX A500 Laptop: 240 images, structure-from-motion 81 s, level-1 training about 2 h 20 min), and every finished run on a machine corrects that machine's estimates further. Cards not in the library get a rougher guess and a wider range.
+SphereScan ships a library of about 130 graphics cards and 45 CPUs (`spherescan/data/*.json`) with approximate public specs: FP32 TFLOPS, memory bandwidth, memory size. Relative speed is `(TFLOPS/12.7)^0.6 x (GB/s / 360)^0.4`, where an RTX 3060 = 1.0. It is fitted to one real measured run (RTX A500 Laptop, Core Ultra 7 155H, a 2-minute clip at level 1: reading video 72 s, camera positions 81 s, training 1 h 59 min, mesh 3 min; 2 h 04 min in all), and every finished run on a machine corrects that machine's estimates further. Cards not in the library get a rougher guess and a wider range.
 
 ```
 spherescan gpus "rtx 40" --minutes 7                 # compare cards for a 7 min clip
@@ -57,7 +57,7 @@ Wrong or missing entry? Add it to `gpus.json` or `cpus.json` in the SphereScan c
 
 - Finds GPUs (NVIDIA, AMD, Intel, Apple), graphics memory, Vulkan, RAM. Laptops with two GPUs get the faster one.
 - Video decoding: Spirula's built-in decoder first; otherwise ffmpeg with the GPU decoder this machine really supports (checked by a test decode: cuda, d3d11va, vaapi, qsv, videotoolbox); otherwise CPU. If a decoder fails mid-run it falls back automatically.
-- **Automatic memory saving** (`spherescan/memory.py`): every level runs on small cards. If the model says a level will not fit your graphics memory, it steps down a fixed ladder: fewer detail points first, then smaller training pictures, then coarse-to-fine training. The estimate already includes it. Spirula forecasts its own memory use at the start of training; if it expects to run out, the app stops that attempt within seconds and restarts one step lower (up to 8 times), and remembers the step that worked for your graphics card. An actual out-of-memory failure is retried the same way. Only a card too small for any run is refused. The memory model is a first guess anchored on Spirula's '10M splats in 8 GB' claim and has not been measured on real cards.
+- **Automatic memory saving** (`spherescan/memory.py`): every level runs on small cards. If the model says a level will not fit your graphics memory, it steps down a fixed ladder: fewer detail points first, then smaller training pictures, then coarse-to-fine training. The estimate already includes it. Spirula prints a memory forecast at the start of training, but on the one real run so far it predicted a 97% chance of running out and the run finished at full size, so the forecast is shown as a warning only. An actual out-of-memory failure restarts one step lower (up to 8 times) and the step that worked is remembered for your graphics card. Only a card too small for any run is refused. The memory model is a first guess anchored on Spirula's '10M splats in 8 GB' claim and has not been measured on real cards.
 - Time estimates start as a rough guess tuned to an RTX 3060 and are corrected after each run on your machine.
 
 ## Opening the result

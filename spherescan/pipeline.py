@@ -189,25 +189,21 @@ class Job:
     def _train(self, spirula: str, work: Path, detail, mplan) -> None:
         step = mplan.step
 
-        def doomed(parser) -> bool:
-            f = parser.forecast
-            return bool(f and f.chance_oom >= 50 and step < memory.MAX_STEP)
-
         while True:
             p = memory.plan_at(detail, self.hw, step)
             shutil.rmtree(work / "train", ignore_errors=True)
             mark = len(self.log)
             rc = self._run(recipe.train_cmd(spirula, str(work), str(work / "train"), detail, p),
-                           check=False, abort_if=doomed)
+                           check=False)
             if rc == 0:
                 if step != mplan.step:
                     self.detail_note = p.note()
                 if step > 0:
                     memory.remember(self.hw, detail, step)
                 return
-            if (rc == _ABORTED or memory.looks_like_oom(self.log[mark:])) and step < memory.MAX_STEP:
+            if memory.looks_like_oom(self.log[mark:]) and step < memory.MAX_STEP:
                 step += 1
-                why = "Spirula expects to run out of graphics memory" if rc == _ABORTED else "Out of graphics memory"
+                why = "Out of graphics memory"
                 self._say(f"{why}. Starting again with less detail (step {step}).")
                 self.notice = f"{why}. Starting again with less detail."
                 self.stage_progress, self._own_eta, self._stage_t0 = 0.0, None, time.time()

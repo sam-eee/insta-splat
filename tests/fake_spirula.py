@@ -55,13 +55,9 @@ elif a[:2] == ["train", "meshing"]:
     run.mkdir(parents=True)
     (run / "config.json").write_text(json.dumps({"quality": opt("--quality"), "cap_max": opt("--cap-max")}))
     lim = os.environ.get("FAKE_FORECAST_ABOVE")
-    if lim and int(opt("--cap-max")) > int(lim):
+    if lim and int(opt("--cap-max")) > int(lim):         # as on the real run: a scary forecast, then it finishes fine
         print("Warning: training may run out of GPU memory.")
         print("- Projected peak: 6.23 +/- 1.40 GiB   free for training: 3.62 GiB   chance of running out: 97%.", flush=True)
-        import time
-        time.sleep(5)                       # the app should stop us long before this ends
-        print("fake spirula: was not stopped", file=sys.stderr)
-        sys.exit(9)
     if os.environ.get("FAKE_WARN"):
         print("Warning: training may run out of GPU memory.", flush=True)
         import time

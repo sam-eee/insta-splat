@@ -200,11 +200,30 @@ class Library(unittest.TestCase):
         self.assertLess(total("RTX 4090", "Ryzen 9 7950X"), total("RTX 4090", "Intel Core i7-1165G7"))
 
     def test_anchored_on_a_real_measured_run(self):
-        # Measured on an RTX A500 Laptop (4 GB): 240 images -> sfm 81 s, level-1 training ~2h20 for 15000 steps.
-        hw = hardware.virtual("RTX A500 Laptop")
+        # Measured on an RTX A500 Laptop (4 GB) with a Core Ultra 7 155H: a 2-minute two-lens Insta360 clip,
+        # level 1 (120 camera positions, 240 images): extract 72 s, camera positions 81 s,
+        # training 7119 s, mesh 176 s, 2 h 04 min in all.
+        hw = hardware.virtual("RTX A500 Laptop", "Intel Core Ultra 7 155H", gpu_decode=False)
         st = estimate.stage_seconds(DETAILS[1], 120, 2, hw)
-        self.assertAlmostEqual(st["sfm"], 81, delta=45)
-        self.assertAlmostEqual(st["train"], 2 * 3600 + 20 * 60, delta=2400)
+        for stage, actual, tol in (("extract", 72, 0.35), ("sfm", 81, 0.35), ("train", 7119, 0.15), ("mesh", 176, 0.35)):
+            self.assertAlmostEqual(st[stage] / actual, 1.0, delta=tol, msg=stage)
+        total = estimate.estimate(DETAILS[1], 120, 2, hw)["total_s"]
+        self.assertAlmostEqual(total / 7448, 1.0, delta=0.15)
+
+    def test_calibration_saved_by_an_older_model_is_ignored(self):
+        # The first real run stored train x3.8 against the old constants; applied to the refitted ones it
+        # made a 2 hour render read 7-10 hours.
+        import json
+        from spherescan.util import config_dir
+        hw = hardware.virtual("RTX A500 Laptop", "Intel Core Ultra 7 155H", gpu_decode=False)
+        base = estimate.estimate(DETAILS[1], 120, 2, hw)["total_s"]
+        (config_dir() / "calibration.json").write_text(json.dumps({"extract": 0.364, "sfm": 0.438, "train": 3.797, "mesh": 2.245}))
+        self.assertEqual(estimate.calibration(), {})
+        self.assertAlmostEqual(estimate.estimate(DETAILS[1], 120, 2, hw)["total_s"], base)
+        estimate.record_run({"train": 1000.0}, {"train": 1100.0})
+        self.assertEqual(estimate.calibration(), {"train": 1.1})
+        (config_dir() / "calibration.json").write_text(json.dumps({"version": estimate.MODEL_VERSION - 1, "ratios": {"train": 9}}))
+        self.assertEqual(estimate.calibration(), {})
 
     def test_unknown_card_widens_the_range_and_virtual_refuses_it(self):
         hw = fake_hw(); hw.gpus[0].name = "Unknown"; hw.gpus[0].spec_known = False
@@ -545,18 +564,16 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(job.state, "failed")
         self.assertEqual(len([c for c in job.commands if c[1] == "train"]), memory.MAX_STEP + 1)
 
-    def test_spirulas_memory_forecast_triggers_an_early_restart_with_less(self):
+    def test_a_scary_memory_forecast_is_shown_but_does_not_restart_the_run(self):
+        # On the real RTX A500 run Spirula forecast a 97% chance of running out, and the run finished at full size.
         src = self.d / "in"
         mp4(src / "IMG_x.insv", 30)
-        os.environ["FAKE_FORECAST_ABOVE"] = "180000"
+        os.environ["FAKE_FORECAST_ABOVE"] = "100000"
         self.addCleanup(os.environ.pop, "FAKE_FORECAST_ABOVE", None)
         job = self.run_job(footage.scan_folder(str(src)), keep_work=True)
         self.assertEqual(job.state, "done", job.message)
-        trains = [c for c in job.commands if c[1] == "train"]
-        self.assertGreater(len(trains), 1)
-        self.assertLessEqual(int(trains[-1][trains[-1].index("--cap-max") + 1]), 180000)
-        self.assertTrue(any("expects to run out" in l for l in job.log))
-        self.assertEqual(memory.learned_step(DETAILS[1], fake_hw()) > 0, True)   # remembered for next time
+        self.assertEqual(len([c for c in job.commands if c[1] == "train"]), 1)
+        self.assertTrue(any("graphics card may run out of memory" in l or "Warning" in l for l in job.log))
 
     def test_progress_comes_from_spirula_and_an_eta_is_given(self):
         src = self.d / "in"

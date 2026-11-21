@@ -40,22 +40,30 @@ def stage_seconds(detail: Detail, duration_s: float, lenses: int, hw: Optional[H
 
     hw_decode = bool(hw and hw.decode and hw.decode.hwaccel)
     cpu = (hw.cpu_score if hw else 1.0) or 1.0
-    decode = duration_s * lenses * (0.12 if hw_decode else 0.75 / max(cpu, 0.2))      # real-time multiples; software decode is CPU-bound
+    decode = duration_s * lenses * (0.12 if hw_decode else 0.3 / max(cpu, 0.2))       # real-time multiples; software decode is CPU-bound
     extract = decode + images * 0.08
 
     sfm_q = {"low": 0.6, "medium": 1.0, "high": 1.8}[detail.sfm_quality]
     sfm = 0.2 * (images ** 1.1) * sfm_q / max(speed, 0.1) ** 0.6
 
-    its_per_s = 5.0 * speed / (1.0 + 0.25 * plan.splats_m)
+    its_per_s = 5.5 * speed / (1.0 + 0.25 * plan.splats_m)
     train = detail.iterations / max(its_per_s, 0.05) * plan.time_factor
 
-    mesh = (45 + plan.splats_m * 25 + (detail.texture_size / 4096) ** 2 * 20) * (
+    mesh = (100 + plan.splats_m * 60 + (detail.texture_size / 4096) ** 2 * 30) * (
         0.6 / max(speed, 0.1) ** 0.7 + 0.4 / max(cpu, 0.2) ** 0.8)
     return {"extract": extract, "sfm": sfm, "train": train, "mesh": mesh}
 
 
+# Bump when the constants in stage_seconds change. Ratios saved under an older model are meaningless
+# against a newer one (they would multiply a correction that is already built in), so they are dropped.
+MODEL_VERSION = 2
+
+
 def calibration() -> dict:
-    return load_json(config_dir() / _CAL, {})
+    data = load_json(config_dir() / _CAL, {})
+    if not isinstance(data, dict) or data.get("version") != MODEL_VERSION:
+        return {}
+    return data.get("ratios", {})
 
 
 def record_run(predicted: dict, actual: dict) -> None:
@@ -66,7 +74,7 @@ def record_run(predicted: dict, actual: dict) -> None:
             ratio = min(4.0, max(0.3, actual[s] / predicted[s]))
             old = cal.get(s, 1.0)
             cal[s] = round(0.6 * ratio + 0.4 * old if s in cal else ratio, 3)
-    save_json(config_dir() / _CAL, cal)
+    save_json(config_dir() / _CAL, {"version": MODEL_VERSION, "ratios": cal})
 
 
 def estimate(detail: Detail, duration_s: float, lenses: int, hw: Optional[Hardware]) -> dict:
