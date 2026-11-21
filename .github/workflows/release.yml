@@ -43,6 +43,13 @@ jobs:
           esac
           find vendor -maxdepth 4 | head -30
           (cd dl && python -c "import hashlib,sys,glob;[print(hashlib.sha256(open(f,'rb').read()).hexdigest(),f) for f in sorted(glob.glob('*'))]") | tee "spirula-asset-${{ matrix.key }}.sha256"
+      - name: Bundle the OpenGL helper library Spirula needs (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y libopengl0
+          mkdir -p vendor/libs vendor/licenses/libglvnd
+          cp -a /usr/lib/x86_64-linux-gnu/libOpenGL.so.0* vendor/libs/
+          cp /usr/share/doc/libopengl0/copyright vendor/licenses/libglvnd/copyright
       - name: Bundle Spirula's licences
         run: python scripts/fetch_spirula_legal.py "$(tr -d '\r\n ' < SPIRULA_VERSION)" vendor/licenses/spirula-studio
       - name: Build

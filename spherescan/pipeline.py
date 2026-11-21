@@ -17,7 +17,7 @@ from . import memory, recipe
 from .footage import Capture, jpeg_size
 from .hardware import Hardware, device_env
 from .presets import DETAILS, FORMATS
-from .util import IS_WINDOWS, find_executable, popen_flags
+from .util import IS_WINDOWS, engine_env, find_executable, popen_flags
 
 WORK_MARKER = ".spherescan-work"
 
@@ -241,7 +241,7 @@ class Job:
         self.commands.append(cmd)
         if self.dry_run:
             return 0
-        env = {**os.environ, **device_env(self.hw)}
+        env = {**os.environ, **device_env(self.hw), **engine_env()}
         t0 = time.time()
         expected = self._base[2]
         try:
@@ -267,6 +267,11 @@ class Job:
         self._proc.stdout.close()                            # type: ignore[union-attr]
         rc = self._proc.wait()
         self._check()
+        if rc != 0:
+            lib = next((l for l in self.log[-20:] if "error while loading shared libraries" in l), None)
+            if lib:
+                raise StageError("A system library Spirula needs is missing: " + lib.split("libraries:")[-1].strip()
+                                 + ". Install it with your package manager and try again.")
         if rc != 0 and check:
             tail = " | ".join(l for l in self.log[-4:])
             raise StageError(f"'{est.STAGE_LABEL[self.stage]}' failed (exit code {rc}). {tail}")

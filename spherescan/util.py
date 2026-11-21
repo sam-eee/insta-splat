@@ -84,3 +84,12 @@ def find_executable(name: str, env_var: Optional[str] = None) -> Optional[str]:
                         continue
                 return str(cand)
     return shutil.which(name)
+
+
+def engine_env() -> dict:
+    """Environment for Spirula: bundled helper libraries are a fallback, never an override."""
+    libs = app_root() / "vendor" / "libs"
+    if IS_LINUX and libs.is_dir():
+        cur = os.environ.get("LD_LIBRARY_PATH", "")
+        return {"LD_LIBRARY_PATH": (cur + os.pathsep if cur else "") + str(libs)}
+    return {}

@@ -21,6 +21,12 @@ they are unavailable, by opening an issue at https://github.com/sam-eee/spheresc
 
 SphereScan is an independent front end. It is not made, affiliated with or endorsed by the Spirula Studio author, Insta360 (Arashi Vision), GoPro or DJI. Those names are trademarks of their owners and are used only to say which files the app can read.
 
+## libglvnd (Linux builds only)
+
+Linux builds include `libOpenGL.so.0` from Ubuntu's `libopengl0` package (libglvnd, MIT-style
+licence; text in `vendor/licenses/libglvnd/`). Spirula's binary needs it, and many systems lack
+it. It is used only as a fallback after the system's own copy. Source: https://gitlab.freedesktop.org/glvnd/libglvnd
+
 ## Things to know
 
 - **Video codecs.** Spirula Studio's own notes say its built-in H.264/H.265 decoding carries

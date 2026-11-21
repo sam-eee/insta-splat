@@ -159,6 +159,45 @@ class Packaging(unittest.TestCase):
         self.assertTrue(cmd.endswith("run_app.py"))
 
 
+class EngineEnv(unittest.TestCase):
+    def test_bundled_libs_are_appended_not_prepended(self):
+        import spherescan.util as u
+        if not u.IS_LINUX:
+            self.skipTest("Linux only")
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "vendor" / "libs").mkdir(parents=True)
+            old_root, old_env = u.app_root, os.environ.get("LD_LIBRARY_PATH")
+            u.app_root = lambda: Path(t)
+            os.environ["LD_LIBRARY_PATH"] = "/system/libs"
+            try:
+                v = u.engine_env()["LD_LIBRARY_PATH"].split(os.pathsep)
+            finally:
+                u.app_root = old_root
+                os.environ.pop("LD_LIBRARY_PATH") if old_env is None else os.environ.update(LD_LIBRARY_PATH=old_env)
+            self.assertEqual(v[0], "/system/libs")
+            self.assertTrue(v[-1].endswith("libs"))
+
+    def test_missing_system_library_gets_a_plain_message(self):
+        from spherescan.pipeline import Job
+        src = Path(tempfile.mkdtemp())
+        mp4(src / "IMG_x.insv", 30)
+        stub = src / "spirula"
+        stub.write_text("#!/bin/sh\necho 'spirula: error while loading shared libraries: libFoo.so.1: cannot open shared object file' >&2\nexit 127\n")
+        stub.chmod(0o755)
+        os.environ["SPHERESCAN_SPIRULA"] = str(stub)
+        self.addCleanup(os.environ.pop, "SPHERESCAN_SPIRULA", None)
+        job = Job(captures=footage.scan_folder(str(src)), detail_level=1, format_key="glb",
+                  out_dir=str(src / "o"), hw=fake_hw())
+        job.start()
+        for _ in range(100):
+            if job.state != "running":
+                break
+            time.sleep(0.1)
+        self.assertEqual(job.state, "failed")
+        self.assertIn("libFoo.so.1", job.message)
+        self.assertIn("Install", job.message)
+
+
 class Legal(unittest.TestCase):
     def test_licences_are_extracted_and_legal_page_lists_them(self):
         import io
