@@ -35,6 +35,11 @@ def run(cmd: Sequence[str], timeout: float = 15.0) -> tuple[int, str]:
 
 
 def config_dir() -> Path:
+    override = os.environ.get("SPHERESCAN_CONFIG_DIR")      # portable installs and isolated tests
+    if override:
+        d = Path(override)
+        d.mkdir(parents=True, exist_ok=True)
+        return d
     if IS_WINDOWS:
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     elif IS_MAC:

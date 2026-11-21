@@ -9,6 +9,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import atexit
+import shutil
+
+# Every OS keeps settings in a different place; pin them to a throwaway folder so one test's saved
+# calibration or learned memory step can never leak into another (it did, on macOS).
+_CFG = tempfile.mkdtemp(prefix="spherescan-test-cfg-")
+os.environ["SPHERESCAN_CONFIG_DIR"] = _CFG
+atexit.register(shutil.rmtree, _CFG, True)
+
 from helpers import launcher, mp4
 from spherescan import estimate, footage, hardware, memory, recipe
 from spherescan.pipeline import Job
@@ -141,8 +150,9 @@ class Library(unittest.TestCase):
         from spherescan import gpudb
         self.db = gpudb
         self.t = tempfile.TemporaryDirectory()
-        os.environ["XDG_CONFIG_HOME"] = self.t.name
-        os.environ["APPDATA"] = self.t.name
+        self._cfg = os.environ.get("SPHERESCAN_CONFIG_DIR")
+        os.environ["SPHERESCAN_CONFIG_DIR"] = self.t.name
+        self.addCleanup(lambda: os.environ.__setitem__("SPHERESCAN_CONFIG_DIR", self._cfg))
         gpudb.reload()
         self.addCleanup(lambda: (self.t.cleanup(), gpudb.reload()))
 
@@ -502,8 +512,9 @@ class Pipeline(unittest.TestCase):
         self.t = tempfile.TemporaryDirectory()
         self.d = Path(self.t.name)
         os.environ["SPHERESCAN_SPIRULA"] = launcher(self.d)
-        os.environ["XDG_CONFIG_HOME"] = str(self.d / "cfg")
-        os.environ["APPDATA"] = str(self.d / "cfg")
+        prev = os.environ.get("SPHERESCAN_CONFIG_DIR")          # a fresh settings folder per test
+        os.environ["SPHERESCAN_CONFIG_DIR"] = str(self.d / "cfg")
+        self.addCleanup(lambda: os.environ.__setitem__("SPHERESCAN_CONFIG_DIR", prev))
         self.addCleanup(self.t.cleanup)
 
     def run_job(self, caps, **kw):
