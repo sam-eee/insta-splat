@@ -63,6 +63,13 @@ class Model(unittest.TestCase):
         self.job("m.ply", b"ply\n", state="done")
         self.assertEqual(self.get("/api/model")[0], 404)                     # other formats are not previewed
 
+    def test_page_offers_opening_an_existing_model_without_the_server(self):
+        html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
+        for needle in ('id="openmodel"', 'id="modelfile"', 'accept=".glb', "openModelFile", 'addEventListener("drop"'):
+            self.assertIn(needle, html)
+        js = (Path(__file__).parent.parent / "spherescan" / "web" / "viewer.js").read_text()
+        self.assertIn("prototype.clear", js)            # a second model must free the first one's graphics memory
+
     def test_viewer_script_is_served(self):
         status, body, ctype = self.get("/viewer.js", token=None)
         self.assertEqual(status, 200)

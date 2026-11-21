@@ -62,6 +62,11 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
   <h1>SphereScan</h1>
   <div id="hw"><span class="chip">Checking your computer…</span></div>
   <div id="problems"></div>
+  <div class="row" style="margin:0 0 4px">
+    <button id="openmodel">View an existing 3D model…</button>
+    <span class="help" style="margin:0">Already have a .glb file? Open it here, or drop it on this page.</span>
+    <input type="file" id="modelfile" accept=".glb,model/gltf-binary" hidden>
+  </div>
 
   <section class="card" id="s1">
     <h2><span class="num">1</span> Choose your footage folder</h2>
@@ -106,7 +111,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <details><summary>Technical details</summary><pre id="log"></pre></details>
   </section>
   <section class="card hidden" id="view">
-    <h2>Your 3D model</h2>
+    <h2 id="vtitle">Your 3D model</h2>
     <div style="position:relative">
       <canvas id="cv" style="width:100%;height:min(60vh,460px);border-radius:12px;display:block;background:#171a1f"></canvas>
       <div id="vstat" class="small" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#cfd5df;text-align:center;padding:16px;pointer-events:none"></div>
@@ -197,22 +202,34 @@ $("cancel").onclick=()=>api("cancel",{});
 $("openfile").onclick=()=>api("reveal",{what:"file"});
 $("openfolder").onclick=()=>api("reveal",{what:"folder"});
 let viewer=null,viewerFor=null;
-function closeViewer(){if(viewer){viewer.dispose();viewer=null}viewerFor=null;$("view").classList.add("hidden")}
-async function showViewer(path){
-  if(viewerFor===path)return;viewerFor=path;$("view").classList.remove("hidden");
-  const say=t=>{$("vstat").textContent=t};
-  if(!/\.glb$/i.test(path)){say("The built-in viewer shows .glb files. Open this file in your 3D viewer with the button above.");return}
-  if(typeof SphereViewer==="undefined"){say("Your model is saved. Close and reopen SphereScan to preview it here.");return}
+const vsay=t=>{$("vstat").textContent=t};
+function getViewer(){if(!viewer)viewer=new SphereViewer($("cv"));return viewer}
+function closeViewer(){if(viewer)viewer.clear();viewerFor=null;$("view").classList.add("hidden")}
+async function showModel(key,title,getBuf){
+  if(viewerFor===key)return;viewerFor=key;
+  $("vtitle").textContent=title;$("view").classList.remove("hidden");
+  if(viewer)viewer.clear();
+  if(typeof SphereViewer==="undefined"){vsay("Close and reopen SphereScan to use the built-in viewer. Your file is saved.");viewerFor=null;return}
   try{
-    say("Loading your model…");
-    if(viewer){viewer.dispose()}
-    viewer=new SphereViewer($("cv"));
-    const r=await fetch("/api/model",{headers:{"X-Token":TOKEN}});
-    if(!r.ok)throw new Error("The model could not be loaded.");
-    const info=await viewer.load(await r.arrayBuffer(),say);
-    say("");
-  }catch(e){say(String(e.message||e))}
+    vsay("Loading your model…");
+    const v=getViewer(),buf=await getBuf();
+    await v.load(buf,vsay);vsay("");
+    $("view").scrollIntoView({behavior:"smooth",block:"nearest"});
+  }catch(e){viewerFor=null;vsay(String(e.message||e))}
 }
+function showViewer(path){
+  if(!/\.glb$/i.test(path)){viewerFor=path;$("vtitle").textContent="Your 3D model";$("view").classList.remove("hidden");if(viewer)viewer.clear();vsay("The built-in viewer shows .glb files. Open this file in your 3D viewer with the button above.");return}
+  return showModel(path,"Your 3D model",async()=>{const r=await fetch("/api/model",{headers:{"X-Token":TOKEN}});if(!r.ok)throw new Error("The model could not be loaded.");return r.arrayBuffer()});
+}
+function openModelFile(f){
+  if(!f)return;
+  if(!/\.glb$/i.test(f.name)){viewerFor=null;$("vtitle").textContent=f.name;$("view").classList.remove("hidden");if(viewer)viewer.clear();vsay("The built-in viewer shows .glb files. Choose a .glb file.");return}
+  return showModel("file:"+f.name+f.size+f.lastModified,f.name,()=>f.arrayBuffer());
+}
+$("openmodel").onclick=()=>$("modelfile").click();
+$("modelfile").onchange=e=>{openModelFile(e.target.files[0]);e.target.value=""};
+addEventListener("dragover",e=>e.preventDefault());
+addEventListener("drop",e=>{e.preventDefault();openModelFile(e.dataTransfer.files[0])});
 $("vreset").onclick=()=>viewer&&viewer.resetView();
 $("vflip").onclick=()=>viewer&&viewer.toggleFlip();
 const STAGES=[["extract","Reading video"],["sfm","Camera positions"],["train","3D model"],["mesh","Mesh"]];

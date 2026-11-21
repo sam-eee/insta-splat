@@ -113,6 +113,7 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
   };
 
   Viewer.prototype.load = async function (buf, onStatus) {
+    this.clear();
     const g = parseGlb(buf), gl = this.gl, J = g.json;
     const scene = (J.scenes || [{nodes: (J.nodes || []).map((_, i) => i)}])[J.scene || 0];
     const prims = [];
@@ -138,14 +139,14 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
       for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) {
         const w = m4.pt(world, [x, y, z]); for (let c = 0; c < 3; c++) { mn[c] = Math.min(mn[c], w[c]); mx[c] = Math.max(mx[c], w[c]); } }
 
-      const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
-      const buffer = (data, loc, n) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      const vao = gl.createVertexArray(); gl.bindVertexArray(vao); const bufs = [];
+      const buffer = (data, loc, n) => { const b = gl.createBuffer(); bufs.push(b); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0); };
       buffer(pos.data, 0, 3);
       if (uv) buffer(uv.data, 1, 2); else gl.vertexAttrib2f(1, 0, 0);
       if (col) buffer(col.n === 3 ? Float32Array.from({length: col.count * 4}, (_, i) => i % 4 === 3 ? 1 : col.data[Math.floor(i / 4) * 3 + i % 4]) : col.data, 2, 4);
       else gl.vertexAttrib4f(2, 0.8, 0.8, 0.8, 1);
-      const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+      const ib = gl.createBuffer(); bufs.push(ib); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
 
       let tex = null, base = [1, 1, 1, 1];
       const mat = pr.material !== undefined ? J.materials[pr.material] : null, pbr = mat && mat.pbrMetallicRoughness;
@@ -168,10 +169,11 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
         }
         tex = texCache.get(src);
       }
-      this.draws.push({vao, count: idx.length, tex, base, world});
+      this.draws.push({vao, bufs, count: idx.length, tex, base, world});
       tris += idx.length / 3;
     }
     gl.bindVertexArray(null);
+    this.textures = [...texCache.values()];
     this.center = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
     this.radius = Math.max(1e-6, 0.5 * Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]));
     this.dirty = true;
@@ -200,7 +202,14 @@ void main(){ vec4 c = uHasTex ? texture(uTex, vUv) : vCol; o = vec4((c * uBase).
     gl.bindVertexArray(null);
   };
 
-  Viewer.prototype.dispose = function () { this.dead = true; };
+  // Free the graphics memory of the current model so another can be shown on the same canvas.
+  Viewer.prototype.clear = function () {
+    const gl = this.gl;
+    for (const d of this.draws) { gl.deleteVertexArray(d.vao); d.bufs.forEach(b => gl.deleteBuffer(b)); }
+    (this.textures || []).forEach(t => gl.deleteTexture(t));
+    this.draws = []; this.textures = []; this.flip = false; this.resetView();
+  };
+  Viewer.prototype.dispose = function () { this.clear(); this.dead = true; };
 
   window.SphereViewer = Viewer;
 })();
