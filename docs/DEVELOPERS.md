@@ -87,3 +87,7 @@ On Linux, `spherescan install-launcher` adds a menu entry (and `remove-launcher`
 ## README screenshots
 
 `python scripts/screenshots.py` regenerates `docs/images/*.png` from the real page with invented footage and a stand-in computer (no personal data). It needs Chrome, Edge or Chromium.
+
+## Portable mode
+
+A `portable.txt` (or a `SphereScan-data` folder) next to the app turns it on (`util.portable_dir()`); the release zips include one. Settings, estimate calibration and the app-window profile go to `SphereScan-data/settings`; Spirula gets `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` pointed at `SphereScan-data/engine/...` (those are the variables its `AppPaths.cpp` reads). A location that cannot be written falls back to the normal user folders. On macOS "next to the app" means next to the `.app`. `SPHERESCAN_CONFIG_DIR` still overrides everything (tests), and `SPHERESCAN_PORTABLE_ROOT` moves the root (tests, running from source). What portable mode cannot cover: the one-file build unpacks to the system temp folder while running (removed on exit; a hard kill can leave it behind), and the host supplies the browser and graphics driver.

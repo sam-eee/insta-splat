@@ -144,6 +144,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     Free software (GPLv3): SphereScan and the bundled <a href="https://github.com/harry7557558/spirula-studio" target="_blank" rel="noopener">Spirula Studio</a>.
     <a href="/legal" target="_blank">Licences and source code</a> ·
     <a href="#" id="quit">Quit SphereScan</a>
+    <div id="portable" class="hidden" style="margin-top:6px"></div>
   </footer>
 </main>
 <script src="/viewer.js"></script>
@@ -170,6 +171,7 @@ addEventListener("beforeunload",e=>{if(busy){e.preventDefault();e.returnValue=""
 api("hardware").then(h=>{
   if(!h.ready){$("hw").innerHTML='<span class="chip">Could not read hardware</span>';return}
   $("hw").innerHTML=`<span class="chip">${esc(h.summary)}</span>${h.decode?`<span class="chip">${esc(h.decode)}</span>`:""}`+h.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("");
+  if(h.portable){$("portable").textContent="Portable mode: SphereScan keeps its settings in "+h.portable;$("portable").classList.remove("hidden")}
   hwProblems=h.problems;$("problems").innerHTML=h.problems.map(p=>`<div class="card bad">${esc(p)}</div>`).join("");
   refreshGo();
 });

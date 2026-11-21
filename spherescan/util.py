@@ -119,10 +119,55 @@ def run(cmd: Sequence[str], timeout: float = 15.0) -> tuple[int, str]:
         return -1, ""
 
 
+PORTABLE_MARKER = "portable.txt"
+PORTABLE_DATA = "SphereScan-data"
+
+
+def portable_root() -> Path:
+    """The folder that holds SphereScan itself: next to the .exe / binary / .app, or the project folder."""
+    override = os.environ.get("SPHERESCAN_PORTABLE_ROOT")      # for tests and for running from source
+    if override:
+        return Path(override)
+    if getattr(sys, "frozen", False):
+        exe = Path(sys.executable).resolve()
+        if IS_MAC:
+            for parent in exe.parents:
+                if parent.suffix == ".app":
+                    return parent.parent                        # next to SphereScan.app, not inside it
+        return exe.parent
+    return Path(__file__).resolve().parent.parent
+
+
+def portable_dir() -> Optional[Path]:
+    """Where everything SphereScan keeps lives, when it is run as a portable app; otherwise None.
+
+    Portable means a `portable.txt` file (or a `SphereScan-data` folder) sits next to the app. If that
+    place cannot be written to (a read-only drive, Program Files, a quarantined macOS app), we quietly
+    fall back to the normal per-user folders rather than fail.
+    """
+    root = portable_root()
+    data = root / PORTABLE_DATA
+    if not ((root / PORTABLE_MARKER).exists() or data.is_dir()):
+        return None
+    try:
+        data.mkdir(parents=True, exist_ok=True)
+        probe = data / ".write-test"
+        probe.write_text("x")
+        probe.unlink()
+        return data
+    except OSError:
+        return None
+
+
 def config_dir() -> Path:
-    override = os.environ.get("SPHERESCAN_CONFIG_DIR")      # portable installs and isolated tests
+    override = os.environ.get("SPHERESCAN_CONFIG_DIR")      # isolated tests and unusual setups
     if override:
         d = Path(override)
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    portable = portable_dir()
+    if portable:
+        d = portable / "settings"
         d.mkdir(parents=True, exist_ok=True)
         return d
     if IS_WINDOWS:
@@ -177,9 +222,19 @@ def find_executable(name: str, env_var: Optional[str] = None) -> Optional[str]:
 
 
 def engine_env() -> dict:
-    """Environment for Spirula: bundled helper libraries are a fallback, never an override."""
+    """Environment for Spirula: bundled helper libraries are a fallback, never an override; in portable
+    mode its settings and caches go beside the app too."""
+    env = {}
     libs = app_root() / "vendor" / "libs"
     if IS_LINUX and libs.is_dir():
         cur = os.environ.get("LD_LIBRARY_PATH", "")
-        return {"LD_LIBRARY_PATH": (cur + os.pathsep if cur else "") + str(libs)}
-    return {}
+        env["LD_LIBRARY_PATH"] = (cur + os.pathsep if cur else "") + str(libs)
+    portable = portable_dir()
+    if portable:
+        cfg, cache = portable / "engine" / "config", portable / "engine" / "cache"
+        for d in (cfg, cache):
+            d.mkdir(parents=True, exist_ok=True)
+        # Spirula reads APPDATA/LOCALAPPDATA on Windows and XDG_CONFIG_HOME/XDG_CACHE_HOME elsewhere.
+        env.update({"APPDATA": str(cfg), "XDG_CONFIG_HOME": str(cfg),
+                    "LOCALAPPDATA": str(cache), "XDG_CACHE_HOME": str(cache)})
+    return env

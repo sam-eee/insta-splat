@@ -97,6 +97,10 @@ def launcher_text() -> str:
 def install_launcher() -> Path:
     if not IS_LINUX:
         raise RuntimeError("Launcher entries are for Linux. On Windows and macOS the downloaded app is the launcher.")
+    from .util import portable_dir
+    if portable_dir():
+        raise RuntimeError("This copy is portable (portable.txt is next to it), so it does not add menu entries "
+                           "that point at this folder. Delete portable.txt first if you want a menu entry.")
     p = _desktop_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(launcher_text(), encoding="utf-8")

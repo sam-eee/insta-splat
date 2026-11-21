@@ -58,7 +58,13 @@ Your model is a **.glb** file. To look at it again, scroll to the bottom of Sphe
 
 ## Do I have to install it?
 
-No. There is no installer. SphereScan is a single file you can keep anywhere, and it opens in its own window. It keeps a few small settings files (like how fast your computer has been) in your user folder.
+No. There is no installer, and it is **portable**. Unzip the download anywhere (your desktop, a USB stick, a shared folder) and open SphereScan. Next to it you will find a file called `portable.txt`. While that file is there, SphereScan keeps everything it needs in a `SphereScan-data` folder beside the app and leaves the rest of your computer alone. Copy the whole folder to take it with you. Delete `portable.txt` if you would rather it used your normal user folder.
+
+Good to know:
+- Your finished models are saved next to your footage, not in the app folder.
+- SphereScan needs a graphics driver and a browser on the computer you run it on (Edge, Chrome or similar; Edge comes with Windows).
+- It unpacks itself into the computer's temporary folder while running and cleans that up when you close it.
+- If the folder is read-only (or a Mac moved the app into quarantine), SphereScan quietly uses your normal user folder instead.
 
 ## About
 

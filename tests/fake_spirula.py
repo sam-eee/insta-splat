@@ -1,5 +1,6 @@
 """Stands in for spirula: checks the flags the app sends and writes plausible output."""
 import json
+import os
 import struct
 import sys
 from pathlib import Path
@@ -37,6 +38,9 @@ if a[:2] == ["sam", "extract"]:
         for i in range(n):
             (out / d / f"{i:04d}.jpg").write_bytes(jpeg())
     print(f"extracted {n}/{n} frames")
+elif a[:2] == ["sfm", "auto"] and os.environ.get("FAKE_ENV_DUMP") and not Path(os.environ["FAKE_ENV_DUMP"]).exists():
+    Path(os.environ["FAKE_ENV_DUMP"]).write_text(json.dumps({k: os.environ.get(k, "") for k in ("APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME")}))
+    (Path(opt("-o")) / "sparse" / "0").mkdir(parents=True)
 elif a[:2] == ["sfm", "auto"]:
     need("--data-type", "--quality", "--rig", "-o")
     ws = Path(opt("-o"))

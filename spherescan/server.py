@@ -60,7 +60,9 @@ class App:
         problems = list(hw.problems)
         if not spirula:
             problems.append("Spirula Studio is not installed next to this app (see README).")
-        return {"ready": True, "summary": " · ".join(parts),
+        from .util import portable_dir
+        pd = portable_dir()
+        return {"ready": True, "portable": str(pd) if pd else "", "summary": " · ".join(parts),
                 "decode": hw.decode.reason if hw.decode and hw.decode.hwaccel else "", "notes": hw.notes,
                 "problems": problems, "details": hw.to_dict()}
 
