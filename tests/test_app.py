@@ -409,6 +409,7 @@ class EngineEnv(unittest.TestCase):
             self.assertEqual(v[0], "/system/libs")
             self.assertTrue(v[-1].endswith("libs"))
 
+    @unittest.skipIf(os.name == "nt", "uses a shell-script stub; the missing-library error is a Linux/Unix one")
     def test_missing_system_library_gets_a_plain_message(self):
         from spherescan.pipeline import Job
         src = Path(tempfile.mkdtemp())
