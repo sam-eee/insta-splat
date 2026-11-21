@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insta Splat</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mute:#5c6370;--line:#dde1e7;--accent:#2563eb;--accent-ink:#fff;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--soft:#eef2ff}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1115;--card:#181b21;--ink:#eceef2;--mute:#9aa3b2;--line:#2a2f38;--accent:#5b8def;--accent-ink:#0b1020;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--soft:#1c2336}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:28px;margin:8px 0 2px}
+.sub{color:var(--mute);margin:0 0 16px}
+.chip{display:inline-block;font-size:14px;color:var(--mute);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:4px 12px;margin:0 6px 6px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+.card h2{font-size:19px;margin:0 0 4px;display:flex;gap:10px;align-items:center}
+.num{background:var(--accent);color:var(--accent-ink);width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:15px;flex:none}
+.help{color:var(--mute);font-size:15px;margin:0 0 12px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 16px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.path{color:var(--mute);font-size:15px;word-break:break-all}
+.rec{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;cursor:pointer}
+.rec input{width:22px;height:22px;margin-top:2px;flex:none}
+.rec.on{background:var(--soft);border-color:var(--accent)}
+.rec.off{opacity:.5}
+.rec b{display:block}
+.meta{color:var(--mute);font-size:15px}
+.badge{display:inline-block;font-size:13px;border-radius:6px;padding:1px 8px;margin-left:6px;background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+.badge.ok{color:var(--ok)}
+.warn{color:var(--warn);font-size:15px}
+.bad{color:var(--bad)}
+input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
+.ticks{display:flex;justify-content:space-between;font-size:14px;color:var(--mute);margin-top:-4px}
+.ticks span{width:25%;text-align:center}
+.ticks span:first-child{text-align:left}.ticks span:last-child{text-align:right}
+.est{background:var(--soft);border-radius:12px;padding:14px 16px;margin-top:12px}
+.est .big{font-size:26px;font-weight:700}
+.est .small{color:var(--mute);font-size:15px}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:15px}
+td{padding:6px 4px;border-top:1px solid var(--line)}
+tr.sel td{font-weight:600}
+tr.dis td{color:var(--mute)}
+select,input[type=text]{font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+.go{width:100%;font-size:21px;padding:16px;margin-top:6px}
+.bar{height:14px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+.steps{display:flex;gap:6px;flex-wrap:wrap;font-size:15px}
+.steps span{padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute)}
+.steps span.on{color:var(--ink);border-color:var(--accent);background:var(--soft)}
+.steps span.done{color:var(--ok)}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:220px;overflow:auto;font-size:13px;white-space:pre-wrap}
+details summary{cursor:pointer;color:var(--mute);font-size:15px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Insta Splat</h1>
+  <p class="sub">Turn 360° footage into a 3D model. Three choices, then press Go.</p>
+  <div id="hw"><span class="chip">Checking your computer…</span></div>
+  <div id="problems"></div>
+
+  <section class="card" id="s1">
+    <h2><span class="num">1</span> Choose your footage folder</h2>
+    <p class="help">Pick the folder with your Insta360 (.insv), GoPro MAX (.360) or DJI (.osv) files. Matching lens files are joined for you.</p>
+    <div class="row"><button class="primary" id="pick">Choose folder…</button><span class="path" id="folder">No folder chosen</span></div>
+    <details style="margin-top:8px"><summary>Or type the folder location</summary>
+      <div class="row" style="margin-top:8px"><input type="text" id="typed" placeholder="C:\Users\you\Videos\Trip" aria-label="Folder location"><button id="typedgo">Use</button></div></details>
+    <div id="recs"></div>
+  </section>
+
+  <section class="card" id="s2">
+    <h2><span class="num">2</span> Pick the detail level</h2>
+    <p class="help">More detail looks better and takes longer. Times are estimated for this computer and the footage you ticked. On a graphics card with less memory, high levels still run with a little less fine detail (marked ⚠).</p>
+    <input type="range" id="lod" min="1" max="4" step="1" value="2" aria-label="Detail level">
+    <div class="ticks"><span>1 Quick</span><span>2 Standard</span><span>3 High</span><span>4 Maximum</span></div>
+    <div class="est" id="est"><span class="small">Tick a recording above to see the time estimate.</span></div>
+    <table id="tbl"></table>
+  </section>
+
+  <section class="card" id="s3">
+    <h2><span class="num">3</span> Save as</h2>
+    <select id="fmt" aria-label="3D file type"></select>
+    <p class="help" id="fmthint" style="margin-top:8px"></p>
+    <div class="row"><span class="path" id="out">Output folder: next to your footage</span><button id="outbtn">Change…</button></div>
+  </section>
+
+  <button class="primary go" id="go" disabled>Go</button>
+  <p class="help" id="gowhy" style="text-align:center"></p>
+
+  <section class="card hidden" id="prog">
+    <h2 id="ptitle">Working…</h2>
+    <div class="steps" id="steps"></div>
+    <div class="bar"><i id="barfill"></i></div>
+    <div class="meta" id="pmeta"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="cancel">Cancel</button>
+      <button class="primary hidden" id="openfile">Show my 3D model</button>
+      <button class="hidden" id="openfolder">Open folder</button>
+    </div>
+    <p id="perr" class="bad"></p>
+    <details><summary>Technical details</summary><pre id="log"></pre></details>
+  </section>
+</main>
+<script>
+const TOKEN="__TOKEN__";
+const $=id=>document.getElementById(id);
+const api=(p,b)=>fetch("/api/"+p,{method:b?"POST":"GET",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
+const FORMATS=__FORMATS__;
+let caps=[],sel=new Set(),levels=[],hwProblems=[],busy=false,outDir="",defOut="";
+const dur=s=>{const m=Math.round(s/60);return m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min"};
+
+for(const f of FORMATS){const o=document.createElement("option");o.value=f.key;o.textContent=f.label;$("fmt").appendChild(o)}
+const showHint=()=>{$("fmthint").textContent=FORMATS.find(f=>f.key===$("fmt").value).hint};
+$("fmt").onchange=showHint;showHint();
+
+api("hardware").then(h=>{
+  if(!h.ready){$("hw").innerHTML='<span class="chip">Could not read hardware</span>';return}
+  $("hw").innerHTML=`<span class="chip">${esc(h.summary)}</span><span class="chip">${esc(h.decode)}</span>`+h.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("");
+  hwProblems=h.problems;$("problems").innerHTML=h.problems.map(p=>`<div class="card bad">${esc(p)}</div>`).join("");
+  refreshGo();
+});
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+async function scan(folder){
+  $("recs").innerHTML='<p class="help">Looking for recordings…</p>';
+  const r=await api("scan",{folder});
+  if(r.error){$("recs").innerHTML=`<p class="bad">${esc(r.error)}</p>`;return}
+  $("folder").textContent=r.folder;caps=r.captures;sel=new Set();defOut=r.default_out;outDir=defOut;
+  $("out").textContent="Output folder: "+outDir;
+  if(!caps.length){$("recs").innerHTML='<p class="warn">No 360 recordings (.insv, .360, .osv) found in that folder.</p>';update();return}
+  if(caps.length===1)sel.add(caps[0].id);
+  drawRecs();update();
+}
+function drawRecs(){
+  const kind=[...sel].length?caps.find(c=>c.id===[...sel][0]).kind:null;
+  $("recs").innerHTML=caps.map(c=>{
+    const dis=kind&&c.kind!==kind;
+    const badges=(c.paired?'<span class="badge ok">✓ both lenses matched</span>':'')+(c.lens_files[0].length>1?`<span class="badge">${c.lens_files[0].length} parts joined</span>`:'');
+    return `<label class="rec ${sel.has(c.id)?"on":""} ${dis?"off":""}"><input type="checkbox" data-id="${esc(c.id)}" ${sel.has(c.id)?"checked":""} ${dis?"disabled":""}>
+      <span><b>${esc(c.label)}${badges}</b><span class="meta">${dur(c.duration_s)}${c.duration_exact?"":" (approx.)"} · ${c.size_gb.toFixed(1)} GB</span>
+      ${c.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("")}</span></label>`}).join("")+
+    (kind?'<p class="help">Different camera types cannot be combined in one model, so they are greyed out.</p>':"");
+  document.querySelectorAll("#recs input").forEach(i=>i.onchange=()=>{i.checked?sel.add(i.dataset.id):sel.delete(i.dataset.id);drawRecs();update()});
+}
+async function update(){
+  if(!sel.size){levels=[];draw();return}
+  const r=await api("estimate",{ids:[...sel]});levels=r.levels||[];
+  if(r.error)$("est").innerHTML=`<span class="bad">${esc(r.error)}</span>`;else draw(r.approximate);
+}
+function draw(approx){
+  const L=+$("lod").value;
+  if(!levels.length){$("est").innerHTML='<span class="small">Tick a recording above to see the time estimate.</span>';$("tbl").innerHTML="";refreshGo();return}
+  const l=levels[L-1];
+  $("est").innerHTML=`<div class="small">Level ${L}: ${esc(l.name)}</div><div class="big">${esc(l.text)}</div>
+    <div class="small">${esc(l.blurb)}${l.available?"":` <b class="warn">Not available: ${esc(l.why)}</b>`}</div>
+    ${l.memory_note?`<div class="warn" style="margin-top:6px">${esc(l.memory_note)}</div>`:""}
+    <div class="small" style="margin-top:6px"><b>Total estimate: ${esc(l.total_text)}</b> from video to mesh${approx?" (video length is approximate)":""}</div>`;
+  $("tbl").innerHTML=levels.map((x,i)=>`<tr class="${i+1===L?"sel":""} ${x.available?"":"dis"}"><td>${i+1}</td><td>${esc(x.name)}</td><td>${x.frames} camera positions${x.reduced?` · ${x.kept_pct}% detail points`:""}</td><td style="text-align:right">${esc(x.text)}${x.available?(x.reduced?" ⚠":""):" ✕"}</td></tr>`).join("");
+  refreshGo();
+}
+function refreshGo(){
+  const l=levels[+$("lod").value-1];let why="";
+  if(hwProblems.length)why=hwProblems[0];
+  else if(!sel.size)why="Choose a recording first.";
+  else if(l&&!l.available)why=l.why;
+  $("go").disabled=!!why||busy;$("gowhy").textContent=why;
+}
+$("lod").oninput=()=>draw();
+$("pick").onclick=async()=>{const r=await api("pick",{kind:"folder"});if(r.path)scan(r.path)};
+$("typedgo").onclick=()=>$("typed").value&&scan($("typed").value);
+$("outbtn").onclick=async()=>{const r=await api("pick",{kind:"folder"});if(r.path){outDir=r.path;$("out").textContent="Output folder: "+outDir}};
+$("go").onclick=async()=>{
+  const r=await api("start",{ids:[...sel],level:+$("lod").value,format:$("fmt").value,out_dir:outDir});
+  if(r.error){$("gowhy").textContent=r.error;return}
+  busy=true;$("prog").classList.remove("hidden");$("cancel").classList.remove("hidden");
+  ["openfile","openfolder"].forEach(i=>$(i).classList.add("hidden"));$("perr").textContent="";
+  refreshGo();$("prog").scrollIntoView({behavior:"smooth"});poll();
+};
+$("cancel").onclick=()=>api("cancel",{});
+$("openfile").onclick=()=>api("reveal",{what:"file"});
+$("openfolder").onclick=()=>api("reveal",{what:"folder"});
+const STAGES=[["extract","Reading video"],["sfm","Camera positions"],["train","3D model"],["mesh","Mesh"]];
+async function poll(){
+  const s=await api("status");
+  const idx=STAGES.findIndex(x=>x[0]===s.stage);
+  $("steps").innerHTML=STAGES.map((x,i)=>`<span class="${s.state==="done"||i<idx?"done":i===idx?"on":""}">${s.state==="done"||i<idx?"✓ ":""}${x[1]}</span>`).join("");
+  $("barfill").style.width=(s.overall*100).toFixed(1)+"%";
+  $("log").textContent=(s.log||[]).join("\n");
+  const m=Math.round((s.elapsed||0)/60);
+  $("pmeta").textContent=`${Math.round(s.overall*100)}% · ${s.stage_label||""} · ${m} min elapsed`;
+  $("ptitle").textContent={running:"Working… you can leave this running",done:"Your 3D model is ready",failed:"That did not work",cancelled:"Cancelled"}[s.state]||"";
+  if(s.state==="running"){setTimeout(poll,1500);return}
+  busy=false;refreshGo();$("cancel").classList.add("hidden");
+  if(s.state==="done"){$("openfile").classList.remove("hidden");$("openfolder").classList.remove("hidden");$("pmeta").textContent="Saved to "+s.result}
+  if(s.state==="failed")$("perr").textContent=s.message;
+  if(s.detail_note)$("pmeta").textContent+="  "+s.detail_note;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[project]
+name = "insta-splat"
+version = "0.1.0"
+description = "Pick 360 footage, choose a detail level, get a textured 3D mesh. A simple front end for Spirula Studio."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+insta-splat = "insta_splat.__main__:main"
+
+[tool.setuptools.package-data]
+insta_splat = ["web/*.html"]
