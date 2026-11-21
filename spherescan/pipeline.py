@@ -264,7 +264,7 @@ class Job:
         f = min(self.stage_progress, 1.0)
         eta = None
         if self._predicted and self.stage in self._predicted and self.started:
-            eta = eta_seconds(list(est.STAGES), self._predicted, self.stage, f, time.time() - self.started,
+            eta = eta_seconds(list(est.STAGES), self._predicted, self.stage, f,
                               time.time() - self._stage_t0, self._own_eta)
         with self._lock:
             self.overall = min(0.99, base + span * f)

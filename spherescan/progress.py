@@ -101,19 +101,21 @@ def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def eta_seconds(order: list, predicted: dict, current: str, fraction: float, elapsed_total: float,
+def eta_seconds(order: list, predicted: dict, current: str, fraction: float,
                 stage_elapsed: float, own_eta: Optional[float] = None) -> Optional[float]:
-    """Seconds left for the whole run. Rough by nature: later stages scale with how this machine has run so far."""
+    """Seconds left for the whole run: this stage's own estimate plus the estimate of each stage still to come.
+
+    This stage: Spirula's own ETA where it prints one (training), otherwise the pace so far, otherwise our
+    estimate for the stage. Stages to come: our per-stage estimates, as shown before the run started.
+    """
     i = order.index(current)
-    done = sum(predicted[s] for s in order[:i]) + fraction * predicted[current]
-    ratio = clamp(elapsed_total / done, 0.3, 8.0) if done > 30 and elapsed_total > 30 else 1.0
     if own_eta is not None:
         here = own_eta
     elif fraction >= 0.03 and stage_elapsed > 20:
         here = stage_elapsed * (1 - fraction) / fraction
     else:
-        here = predicted[current] * ratio * (1 - fraction)
-    later = sum(predicted[s] for s in order[i + 1:]) * ratio
+        here = predicted[current] * (1 - fraction)
+    later = sum(predicted[s] for s in order[i + 1:])
     return max(0.0, here + later)
 
 

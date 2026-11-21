@@ -254,14 +254,14 @@ class Progress(unittest.TestCase):
         s.feed("[run]     Mapping: 00:01:08   Registered: 240/240 images   Points: 46242   Cameras: 2")
         self.assertEqual(s.fraction, 1.0)
 
-    def test_eta_uses_spirulas_own_estimate_and_scales_later_stages(self):
+    def test_eta_is_spirulas_own_for_this_stage_plus_our_estimate_for_each_stage_to_come(self):
         from spherescan.progress import eta_seconds
         order = ["extract", "sfm", "train", "mesh"]
         pred = {"extract": 60, "sfm": 300, "train": 1000, "mesh": 200}
-        # train 10% in; machine is running 2x slower than predicted so far
-        e = eta_seconds(order, pred, "train", 0.1, elapsed_total=2 * (60 + 300 + 100), stage_elapsed=200, own_eta=1800)
-        self.assertAlmostEqual(e, 1800 + 200 * 2, delta=1)
-        self.assertEqual(eta_seconds(order, pred, "mesh", 1.0, 1500, 10), 0.0)
+        self.assertEqual(eta_seconds(order, pred, "train", 0.1, 200, own_eta=1800), 1800 + 200)
+        self.assertEqual(eta_seconds(order, pred, "sfm", 0.5, 100), 100 + 1000 + 200)         # pace so far, then estimates
+        self.assertEqual(eta_seconds(order, pred, "sfm", 0.0, 5), 300 + 1000 + 200)           # nothing to go on yet
+        self.assertEqual(eta_seconds(order, pred, "mesh", 1.0, 10), 0.0)
 
     def test_mesh_progress_file(self):
         from spherescan.progress import read_mesh_progress
@@ -325,6 +325,7 @@ class Packaging(unittest.TestCase):
     def test_page_says_a_render_is_underway_and_only_one_runs_at_a_time(self):
         html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
         self.assertIn("A render is already underway.", html)
+        self.assertIn("elapsed${left}", html)                       # time left sits next to time elapsed
         self.assertIn("only run one render at a time", html)
         self.assertIn('toggle("hidden",s.state!=="running")', html)
         from spherescan.server import App

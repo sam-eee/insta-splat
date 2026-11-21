@@ -137,6 +137,7 @@ const $=id=>document.getElementById(id);
 const api=(p,b)=>fetch("/api/"+p,{method:b?"POST":"GET",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
 const FORMATS=__FORMATS__;
 let caps=[],sel=new Set(),levels=[],hwProblems=[],busy=false,outDir="",defOut="";
+const hm=sec=>{const m=Math.round(sec/60);return m<60?m+" min":Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min"};
 const dur=s=>{const m=Math.round(s/60);return m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min"};
 
 for(const f of FORMATS){const o=document.createElement("option");o.value=f.key;o.textContent=f.label;$("fmt").appendChild(o)}
@@ -261,9 +262,9 @@ async function pollOnce(){
   $("busy").classList.toggle("hidden",s.state!=="running");$("busydesc").textContent=s.desc?s.desc.replace(" (recommended)",""):"";
   $("barfill").style.width=(s.overall*100).toFixed(1)+"%";
   $("log").textContent=(s.log||[]).join("\n");
-  const m=Math.round((s.elapsed||0)/60);
-  $("pmeta").textContent=`${Math.round(s.overall*100)}% overall · ${m} min elapsed`;
-  $("eta").textContent=(s.state==="running"&&s.eta_text)?`Time left: ${s.eta_text}. This is a rough estimate and may not be exact.`:"";
+  const left=(s.state==="running"&&s.eta_text)?` · ${s.eta_text} left`:"";
+  $("pmeta").textContent=`${Math.round(s.overall*100)}% overall · ${hm(s.elapsed||0)} elapsed${left}`;
+  $("eta").textContent=left?"Time left is a rough estimate and may not be exact.":"";
   $("ptitle").textContent={running:"Working… you can leave this running",done:"Your 3D model is ready",failed:"That did not work",cancelled:"Cancelled"}[s.state]||"";
   if(s.state==="running"){setTimeout(poll,1500);return}
   busy=false;refreshGo();$("cancel").classList.add("hidden");
