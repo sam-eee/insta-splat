@@ -106,10 +106,12 @@ class App:
         self.last_ping = time.time()
         return {"ok": True}
 
-    def idle_for_quit(self, grace: float = 25.0, first_load: float = 90.0) -> bool:
+    def idle_for_quit(self, grace: float = 25.0, first_load: float = 90.0, keep_after_finish: float = 1800.0) -> bool:
         """True when the page was closed and nothing is running, so the app can exit by itself."""
         if self.job and self.job.state == "running":
             return False
+        if self.job and self.job.ended and time.time() - self.job.ended < keep_after_finish:
+            return False                                   # leave the result reachable if the tab was closed mid-run
         if self.last_ping == self.started:           # the page has never loaded
             return time.time() - self.started > first_load
         return time.time() - self.last_ping > grace

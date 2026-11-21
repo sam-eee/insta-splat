@@ -56,6 +56,7 @@ class Job:
     commands: list = field(default_factory=list)
     detail_note: str = ""
     eta_s: Optional[float] = None
+    ended: float = 0.0
     _own_eta: Optional[float] = None
     _stage_t0: float = 0.0
     _predicted: dict = field(default_factory=dict)
@@ -70,6 +71,11 @@ class Job:
         self.started = time.time()
         threading.Thread(target=self._main, daemon=True).start()
 
+    def describe(self) -> str:
+        d = DETAILS.get(self.detail_level)
+        f = FORMATS.get(self.format_key)
+        return " · ".join(x for x in (self.captures[0].label if self.captures else "", d.name if d else "", f.label if f else "") if x)
+
     def cancel(self) -> None:
         self._cancel = True
         p = self._proc
@@ -80,7 +86,7 @@ class Job:
         with self._lock:
             return {"state": self.state, "stage": self.stage, "stage_label": est.STAGE_LABEL.get(self.stage, ""),
                     "stage_progress": self.stage_progress, "overall": self.overall, "message": self.message,
-                    "result": self.result, "detail_note": self.detail_note, "eta_s": self.eta_s, "eta_text": human_left(self.eta_s), "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
+                    "result": self.result, "detail_note": self.detail_note, "eta_s": self.eta_s, "eta_text": human_left(self.eta_s), "desc": self.describe(), "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
                     "commands": self.commands if self.dry_run else []}
 
     # ---- internals ------------------------------------------------------
@@ -159,6 +165,8 @@ class Job:
             self.state, self.message = "failed", str(e)
         except Exception as e:      # never leave the GUI waiting on a dead thread
             self.state, self.message = "failed", f"Unexpected error: {e}"
+        finally:
+            self.ended = time.time()
 
     # ---- train, shrinking the model until it fits ---------------------------
     def _train(self, spirula: str, work: Path, detail, mplan) -> None:

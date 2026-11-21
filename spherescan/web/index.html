@@ -95,6 +95,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <h2 id="ptitle">Working…</h2>
     <div class="steps" id="steps"></div>
     <div class="bar"><i id="barfill"></i></div>
+    <div class="meta" id="pdesc"></div>
     <div class="meta" id="pmeta"></div>
     <div class="meta" id="eta"></div>
     <div class="row" style="margin-top:10px">
@@ -233,11 +234,26 @@ addEventListener("dragover",e=>e.preventDefault());
 addEventListener("drop",e=>{e.preventDefault();openModelFile(e.dataTransfer.files[0])});
 $("vreset").onclick=()=>viewer&&viewer.resetView();
 $("vflip").onclick=()=>viewer&&viewer.toggleFlip();
+// If the page was closed or refreshed during a run, pick it up again from the app, which kept going.
+async function restore(){
+  let s;try{s=await api("status")}catch(e){return}
+  if(!s||!s.state||s.state==="idle")return;
+  closeViewer();busy=s.state==="running";
+  $("prog").classList.remove("hidden");
+  ["openfile","openfolder"].forEach(i=>$(i).classList.add("hidden"));
+  if(busy)$("cancel").classList.remove("hidden");
+  $("perr").textContent="";refreshGo();poll();
+}
 const STAGES=[["extract","Reading video"],["sfm","Camera positions"],["train","3D model"],["mesh","Mesh"]];
 async function poll(){
+  if(polling)return;polling=true;try{await pollOnce()}finally{polling=false}
+}
+let polling=false;
+async function pollOnce(){
   const s=await api("status");
   const idx=STAGES.findIndex(x=>x[0]===s.stage);
   $("steps").innerHTML=STAGES.map((x,i)=>`<span class="${s.state==="done"||i<idx?"done":i===idx?"on":""}">${s.state==="done"||i<idx?"✓ ":""}${x[1]}${i===idx&&s.state==="running"?" "+Math.round(s.stage_progress*100)+"%":""}</span>`).join("");
+  $("pdesc").textContent=s.desc||"";
   $("barfill").style.width=(s.overall*100).toFixed(1)+"%";
   $("log").textContent=(s.log||[]).join("\n");
   const m=Math.round((s.elapsed||0)/60);
@@ -252,6 +268,7 @@ async function poll(){
   if(s.state==="failed")$("perr").textContent=s.message;
   if(s.detail_note)$("pmeta").textContent+="  "+s.detail_note;
 }
+restore();
 </script>
 </body>
 </html>

@@ -307,6 +307,21 @@ class Packaging(unittest.TestCase):
         app.job = type("J", (), {"state": "running"})()
         self.assertFalse(app.idle_for_quit())                 # but never mid-run
 
+    def test_result_stays_reachable_for_a_while_after_the_tab_was_closed(self):
+        from spherescan.server import App
+        app = App.__new__(App)
+        app.started, app.last_ping = time.time() - 1000, time.time() - 500        # page closed long ago
+        app.job = type("J", (), {"state": "done", "ended": time.time() - 60})()
+        self.assertFalse(app.idle_for_quit())                                     # finished a minute ago: stay up
+        app.job.ended = time.time() - 4000
+        self.assertTrue(app.idle_for_quit())                                      # long finished: may quit
+
+    def test_page_recovers_a_run_from_the_app_when_reloaded(self):
+        html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
+        self.assertIn("async function restore()", html)
+        self.assertTrue(html.rstrip().endswith("</html>"))
+        self.assertIn("restore();\n</script>", html)
+
     def test_build_command_bundles_web_and_entry_point(self):
         import build
         cmd = " ".join(build.command())
