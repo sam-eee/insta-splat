@@ -322,6 +322,16 @@ class Packaging(unittest.TestCase):
         self.assertTrue(html.rstrip().endswith("</html>"))
         self.assertIn("restore();\n</script>", html)
 
+    def test_page_says_a_render_is_underway_and_only_one_runs_at_a_time(self):
+        html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
+        self.assertIn("A render is already underway.", html)
+        self.assertIn("only run one render at a time", html)
+        self.assertIn('toggle("hidden",s.state!=="running")', html)
+        from spherescan.server import App
+        app = App.__new__(App)
+        app.job = type("J", (), {"state": "running"})()
+        self.assertIn("already in progress", app.start({"ids": ["x"]})["error"])
+
     def test_build_command_bundles_web_and_entry_point(self):
         import build
         cmd = " ".join(build.command())

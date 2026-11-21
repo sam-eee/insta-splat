@@ -60,6 +60,10 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
 <body>
 <main>
   <h1>SphereScan</h1>
+  <div id="busy" class="card hidden" style="border-color:var(--accent);background:var(--soft)" role="status">
+    <b>A render is already underway.</b> <span id="busydesc"></span>
+    <div class="small" style="margin-top:4px">SphereScan can only run one render at a time, so you can start another once this one finishes. You can leave this page open or close it; the render keeps going.</div>
+  </div>
   <div id="hw"><span class="chip">Checking your computer…</span></div>
   <div id="problems"></div>
 
@@ -254,6 +258,7 @@ async function pollOnce(){
   const idx=STAGES.findIndex(x=>x[0]===s.stage);
   $("steps").innerHTML=STAGES.map((x,i)=>`<span class="${s.state==="done"||i<idx?"done":i===idx?"on":""}">${s.state==="done"||i<idx?"✓ ":""}${x[1]}${i===idx&&s.state==="running"?" "+Math.round(s.stage_progress*100)+"%":""}</span>`).join("");
   $("pdesc").textContent=s.desc||"";
+  $("busy").classList.toggle("hidden",s.state!=="running");$("busydesc").textContent=s.desc?s.desc.replace(" (recommended)",""):"";
   $("barfill").style.width=(s.overall*100).toFixed(1)+"%";
   $("log").textContent=(s.log||[]).join("\n");
   const m=Math.round((s.elapsed||0)/60);
