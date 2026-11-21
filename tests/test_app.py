@@ -334,6 +334,119 @@ class Progress(unittest.TestCase):
             self.assertIsNone(read_mesh_progress(Path(t)))
 
 
+class WindowIsTheApp(unittest.TestCase):
+    def app(self):
+        from spherescan.server import App
+        a = App.__new__(App)
+        a.job, a.live, a.ever_connected, a.quitting = None, 0, False, False
+        a.started = a.last_disconnect = time.time()
+        a._live_lock = __import__("threading").Lock()
+        return a
+
+    def test_app_stays_while_a_window_is_connected_and_quits_when_it_is_gone(self):
+        a = self.app()
+        self.assertFalse(a.window_closed())                       # just started: give the window time to open
+        a.conn_open()
+        a.last_disconnect -= 1000
+        self.assertFalse(a.window_closed())                       # connected, however long ago it last changed
+        a.conn_close()
+        self.assertFalse(a.window_closed())                       # a reload reconnects within the grace period
+        a.last_disconnect -= 30
+        self.assertTrue(a.window_closed())                        # gone for good
+        a.conn_open()
+        self.assertFalse(a.window_closed())                       # back
+        b = self.app(); b.started -= 1000
+        self.assertTrue(b.window_closed())                        # no window ever appeared
+
+    def test_a_computer_that_slept_is_not_mistaken_for_a_closed_window(self):
+        a = self.app()
+        a.conn_open(); a.conn_close()
+        a.last_disconnect -= 3600                                 # the clock jumped while asleep
+        a.forgive_gap()
+        self.assertFalse(a.window_closed())
+
+    def test_the_live_connection_is_counted_and_needs_the_token(self):
+        import http.client
+        import threading
+        from http.server import ThreadingHTTPServer
+        from spherescan.server import make_handler
+        a = self.app(); a.token = "tok"
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(a))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.shutdown)
+        port = httpd.server_address[1]
+        bad = http.client.HTTPConnection("127.0.0.1", port); bad.request("GET", "/api/live?token=nope")
+        self.assertEqual(bad.getresponse().status, 403)
+        c = http.client.HTTPConnection("127.0.0.1", port); c.request("GET", "/api/live?token=tok")
+        r = c.getresponse()
+        self.assertEqual(r.status, 200)
+        for _ in range(30):
+            if a.live == 1:
+                break
+            time.sleep(0.1)
+        self.assertEqual(a.live, 1)
+        r.close()
+        c.close()                                                   # the window closes
+        for _ in range(60):
+            if a.live == 0:
+                break
+            time.sleep(0.1)
+        self.assertEqual(a.live, 0)
+        self.assertEqual(a.quitting, False)
+        a.quit()
+        self.assertTrue(a.quitting)
+
+    def test_spirula_is_started_so_that_it_dies_with_us_on_linux(self):
+        import spherescan.util as u
+        flags = u.child_flags()
+        if u.IS_LINUX:
+            self.assertIn("preexec_fn", flags)
+        self.assertEqual(flags.get("start_new_session"), None if u.IS_WINDOWS else True)
+
+    def test_page_holds_a_live_connection_warns_before_closing_and_can_quit(self):
+        html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
+        for needle in ("new EventSource(", "beforeunload", 'id="quit"', "closing SphereScan stops the render"):
+            self.assertIn(needle, html)
+        self.assertNotIn("the render keeps going", html)
+
+
+class AppWindow(unittest.TestCase):
+    def test_command_is_a_plain_app_window_with_its_own_profile(self):
+        from spherescan import window
+        cmd = window.app_command("/usr/bin/chrome", "http://127.0.0.1:5000/")
+        self.assertIn("--app=http://127.0.0.1:5000/", cmd)
+        self.assertTrue(any(c.startswith("--user-data-dir=") and c.endswith("window") for c in cmd))
+        self.assertIn("--no-first-run", cmd)
+
+    def test_browser_choice_override_and_fallback(self):
+        from spherescan import window
+        fake = Path(tempfile.mkdtemp()) / "mybrowser"
+        fake.write_text("x")
+        os.environ["SPHERESCAN_BROWSER"] = str(fake)
+        self.addCleanup(os.environ.pop, "SPHERESCAN_BROWSER", None)
+        self.assertEqual(window.find_app_browser(), str(fake))
+        os.environ["SPHERESCAN_BROWSER"] = "default"
+        self.assertIsNone(window.find_app_browser())              # asked for the ordinary browser
+        os.environ["SPHERESCAN_NO_WINDOW"] = "1"
+        self.addCleanup(os.environ.pop, "SPHERESCAN_NO_WINDOW", None)
+        self.assertEqual(window.open_window("http://127.0.0.1:1/"), "none")
+
+    def test_linux_launcher_entry(self):
+        from spherescan import window
+        text = window.launcher_text()
+        for needle in ("[Desktop Entry]", "Name=SphereScan", "Terminal=false", "StartupWMClass=SphereScan", "icon.svg"):
+            self.assertIn(needle, text)
+        with tempfile.TemporaryDirectory() as t:
+            os.environ["XDG_DATA_HOME"] = t
+            self.addCleanup(os.environ.pop, "XDG_DATA_HOME", None)
+            import spherescan.util as u
+            if u.IS_LINUX:
+                p = window.install_launcher()
+                self.assertTrue(p.exists() and str(p).startswith(t))
+                self.assertTrue(window.remove_launcher())
+                self.assertFalse(window.remove_launcher())
+
+
 class Packaging(unittest.TestCase):
     def test_bundled_spirula_is_found_under_vendor_and_made_executable(self):
         import spherescan.util as u
@@ -354,28 +467,6 @@ class Packaging(unittest.TestCase):
                 u.app_root = lambda: Path(u.__file__).resolve().parent.parent
                 if old is not None:
                     os.environ["SPHERESCAN_SPIRULA"] = old
-
-    def test_app_quits_itself_after_the_page_closes_but_not_during_a_run(self):
-        from spherescan.server import App
-        app = App.__new__(App)
-        app.job, app.started = None, time.time() - 1000
-        app.last_ping = app.started
-        self.assertTrue(app.idle_for_quit())                  # never loaded
-        app.last_ping = time.time()
-        self.assertFalse(app.idle_for_quit())                 # page open
-        app.last_ping = time.time() - 100
-        self.assertTrue(app.idle_for_quit())                  # page closed
-        app.job = type("J", (), {"state": "running"})()
-        self.assertFalse(app.idle_for_quit())                 # but never mid-run
-
-    def test_result_stays_reachable_for_a_while_after_the_tab_was_closed(self):
-        from spherescan.server import App
-        app = App.__new__(App)
-        app.started, app.last_ping = time.time() - 1000, time.time() - 500        # page closed long ago
-        app.job = type("J", (), {"state": "done", "ended": time.time() - 60})()
-        self.assertFalse(app.idle_for_quit())                                     # finished a minute ago: stay up
-        app.job.ended = time.time() - 4000
-        self.assertTrue(app.idle_for_quit())                                      # long finished: may quit
 
     def test_page_recovers_a_run_from_the_app_when_reloaded(self):
         html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
@@ -637,6 +728,30 @@ class Pipeline(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(job.state, "done", job.message)
         self.assertTrue(any("graphics card may run out of memory" in n for n in notes), set(notes))
+
+    def test_quitting_stops_the_render_kills_spirula_and_cleans_up(self):
+        from spherescan.server import App
+        src = self.d / "in"
+        mp4(src / "IMG_x.insv", 30)
+        os.environ["FAKE_SLOW"] = "1"
+        self.addCleanup(os.environ.pop, "FAKE_SLOW", None)
+        job = Job(captures=footage.scan_folder(str(src)), detail_level=1, format_key="glb",
+                  out_dir=str(self.d / "out"), hw=fake_hw())
+        job.start()
+        for _ in range(100):                                       # wait until it is training
+            if job.stage == "train" and job._proc and job.progress_started():
+                break
+            time.sleep(0.1)
+        proc = job._proc
+        self.assertIsNotNone(proc)
+        app = App.__new__(App)
+        app.job = job
+        t0 = time.time()
+        app.shutdown_job(timeout=15)                               # what happens when the window closes
+        self.assertLess(time.time() - t0, 14)
+        self.assertEqual(job.state, "cancelled")
+        self.assertIsNotNone(proc.poll(), "Spirula must be stopped, not left running")
+        self.assertFalse(list((self.d / "out").glob(".*_work")), "the unfinished work folder should be removed")
 
     def test_dry_run_prints_commands_and_runs_nothing(self):
         src = self.d / "in"

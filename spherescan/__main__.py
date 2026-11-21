@@ -57,6 +57,8 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("gui", help="open the app (default)")
     sub.add_parser("hardware", help="show what this computer can do")
+    sub.add_parser("install-launcher", help="Linux: add SphereScan to the applications menu")
+    sub.add_parser("remove-launcher", help="Linux: remove that menu entry")
     g = sub.add_parser("gpus", help="list the offline card library (or CPUs with --cpus)")
     g.add_argument("query", nargs="?", default="", help="filter by name")
     g.add_argument("--cpus", action="store_true")
@@ -81,6 +83,16 @@ def main(argv=None) -> int:
     if a.cmd in (None, "gui"):
         from .server import serve
         serve()
+        return 0
+    if a.cmd in ("install-launcher", "remove-launcher"):
+        from . import window
+        try:
+            if a.cmd == "install-launcher":
+                print("Added:", window.install_launcher(), "\nSphereScan now appears in your applications menu.")
+            else:
+                print("Removed the launcher." if window.remove_launcher() else "There was no launcher to remove.")
+        except RuntimeError as e:
+            sys.exit(str(e))
         return 0
     if a.cmd == "gpus":
         return _list_library(a)

@@ -15,6 +15,20 @@ IS_MAC = platform.system() == "Darwin"
 IS_LINUX = platform.system() == "Linux"
 
 
+def child_flags() -> dict:
+    """Flags for the engine (Spirula): like popen_flags, plus on Linux it is stopped if SphereScan dies abruptly."""
+    f = popen_flags()
+    if IS_LINUX:
+        def die_with_parent():
+            try:
+                import ctypes, signal
+                ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)    # PR_SET_PDEATHSIG
+            except Exception:
+                pass
+        f["preexec_fn"] = die_with_parent
+    return f
+
+
 def popen_flags() -> dict:
     """Keyword arguments that keep child processes from flashing a console."""
     if IS_WINDOWS:

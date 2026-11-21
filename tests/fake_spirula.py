@@ -62,6 +62,10 @@ elif a[:2] == ["train", "meshing"]:
         print("Warning: training may run out of GPU memory.", flush=True)
         import time
         time.sleep(1.2)                     # long enough for the page to see it
+    if os.environ.get("FAKE_SLOW"):
+        print("step      1/10000 (  0%)  splats 46242  [elapsed 00:00:01 | ETA --:--]", flush=True)
+        import time
+        time.sleep(30)                      # a long training run the test will cancel
     for i in (1, 5, 10):
         print(f"step {i * 1000:>6}/10000 ({i * 10:>3}%)  splats 46242  [elapsed 00:00:01 | ETA 00:00:0{10 - i}]", flush=True)
 elif a[:1] == ["mesh"]:

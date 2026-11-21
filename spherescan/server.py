@@ -20,6 +20,7 @@ from .footage import Capture
 from .pipeline import Job, find_spirula
 from .presets import DEFAULT_FORMAT, DETAILS, FORMATS
 from .util import IS_MAC, IS_WINDOWS, popen_flags, run
+from .window import open_window
 
 WEB = Path(__file__).parent / "web"
 
@@ -33,6 +34,11 @@ class App:
         self.job: Optional[Job] = None
         self.last_ping = time.time()
         self.started = time.time()
+        self.live = 0                         # open connections from the page (one per window)
+        self.ever_connected = False
+        self.last_disconnect = time.time()
+        self.quitting = False
+        self._live_lock = threading.Lock()
         self._hw_ready = threading.Event()
         threading.Thread(target=self._probe, daemon=True).start()
 
@@ -102,19 +108,48 @@ class App:
         self.job.start()
         return {"ok": True}
 
-    def ping(self) -> dict:
-        self.last_ping = time.time()
-        return {"ok": True}
+    # ---- the window is the app ------------------------------------------------
+    # The page holds one open connection (/api/live). While it is open the window exists; when the
+    # window or tab closes, the connection drops at once. A reload reconnects within a second or two,
+    # so only a gap longer than `grace` counts as closed. (A timer-based heartbeat would not do: browsers
+    # slow timers to once a minute in hidden windows.)
+    def conn_open(self) -> None:
+        with self._live_lock:
+            self.live += 1
+            self.ever_connected = True
 
-    def idle_for_quit(self, grace: float = 25.0, first_load: float = 90.0, keep_after_finish: float = 1800.0) -> bool:
-        """True when the page was closed and nothing is running, so the app can exit by itself."""
-        if self.job and self.job.state == "running":
+    def conn_close(self) -> None:
+        with self._live_lock:
+            self.live = max(0, self.live - 1)
+            self.last_disconnect = time.time()
+
+    def forgive_gap(self) -> None:
+        """After the computer slept, wall-clock time jumps; do not count that as the window being closed."""
+        self.last_disconnect = time.time()
+        if not self.ever_connected:
+            self.started = time.time()
+
+    def window_closed(self, grace: float = 12.0, first_load: float = 90.0) -> bool:
+        if self.live > 0:
             return False
-        if self.job and self.job.ended and time.time() - self.job.ended < keep_after_finish:
-            return False                                   # leave the result reachable if the tab was closed mid-run
-        if self.last_ping == self.started:           # the page has never loaded
+        if not self.ever_connected:
             return time.time() - self.started > first_load
-        return time.time() - self.last_ping > grace
+        return time.time() - self.last_disconnect > grace
+
+    def idle_for_quit(self, grace: float = 12.0, first_load: float = 90.0) -> bool:
+        """True when the window is gone. Closing SphereScan also stops any render: the window is the whole app."""
+        return self.window_closed(grace, first_load)
+
+    def shutdown_job(self, timeout: float = 20.0) -> None:
+        """Stop a running render, and its Spirula process, and wait for it to let go."""
+        j = self.job
+        if j and j.state == "running":
+            j.cancel()
+            j.wait(timeout)
+
+    def quit(self) -> dict:
+        self.quitting = True
+        return {"ok": True}
 
     def status(self) -> dict:
         return self.job.snapshot() if self.job else {"state": "idle"}
@@ -214,6 +249,29 @@ def make_handler(app: App):
         def _json(self, obj, code: int = 200) -> None:
             self._send(code, json.dumps(obj).encode(), "application/json")
 
+        def _live(self) -> None:
+            """Hold the connection open for as long as the window exists."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            app.conn_open()
+            try:
+                import select, socket
+                tick = 0
+                while not app.quitting:
+                    ready, _, _ = select.select([self.connection], [], [], 1.0)
+                    if ready and self.connection.recv(1, socket.MSG_PEEK) == b"":
+                        break                                        # the window closed its end
+                    tick += 1
+                    if tick % 3 == 0:                                # a comment now and then keeps proxies honest
+                        self.wfile.write(b": alive\n\n")
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionError, OSError):
+                pass
+            finally:
+                app.conn_close()
+
         def _model(self) -> None:
             """Stream the finished .glb, and only that file, to the page's viewer."""
             j = app.job
@@ -237,6 +295,13 @@ def make_handler(app: App):
                 fmts = json.dumps([{"key": f.key, "label": f.label, "hint": f.hint} for f in FORMATS.values()])
                 html = (WEB / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", app.token).replace("__FORMATS__", fmts)
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
+            if path == "/api/live":
+                from urllib.parse import parse_qs, urlparse
+                if parse_qs(urlparse(self.path).query).get("token", [""])[0] != app.token:
+                    return self._json({"error": "forbidden"}, 403)
+                return self._live()
+            if path in ("/icon.svg", "/favicon.ico"):
+                return self._send(200, (WEB / "icon.svg").read_bytes(), "image/svg+xml")
             if path == "/viewer.js":
                 return self._send(200, (WEB / "viewer.js").read_bytes(), "application/javascript; charset=utf-8")
             if path == "/api/model" and self.headers.get("X-Token") == app.token:
@@ -249,7 +314,7 @@ def make_handler(app: App):
                 if path == "/api/status":
                     return self._json(app.status())
                 if path == "/api/ping":
-                    return self._json(app.ping())
+                    return self._json({"ok": True})
             self._json({"error": "not found"}, 404)
 
         def do_POST(self):
@@ -265,6 +330,7 @@ def make_handler(app: App):
                      "/api/estimate": lambda: app.estimate(body.get("ids", [])),
                      "/api/start": lambda: app.start(body),
                      "/api/cancel": app.cancel,
+                     "/api/quit": app.quit,
                      "/api/reveal": lambda: app.reveal(body.get("what", "folder"))}.get(self.path)
             if not route:
                 return self._json({"error": "not found"}, 404)
@@ -279,13 +345,19 @@ def serve(open_browser: bool = True) -> None:
     app = App()
     httpd = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("SPHERESCAN_PORT", "0"))), make_handler(app))
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"SphereScan is running at {url}  (it quits when you close the page)")
+    print(f"SphereScan is running at {url}  (closing its window quits it and stops any render)")
     if open_browser:
-        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.4, lambda: print("Opened as:", open_window(url), flush=True)).start()
     def watchdog():
+        last = time.time()
         while True:
-            time.sleep(3)
-            if app.idle_for_quit():
+            time.sleep(2)
+            now = time.time()
+            if now - last > 10:            # this thread was frozen: the computer slept. Give the page time to reconnect.
+                app.forgive_gap()
+            last = now
+            if app.quitting or app.idle_for_quit():
+                app.shutdown_job()          # closing the window stops the render too
                 httpd.shutdown()
                 return
     threading.Thread(target=watchdog, daemon=True).start()
@@ -293,3 +365,5 @@ def serve(open_browser: bool = True) -> None:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        app.shutdown_job()          # whatever ended us, never leave Spirula running behind

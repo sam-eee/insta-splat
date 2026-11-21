@@ -15,10 +15,10 @@ You choose a video, move a slider, and press **Go**. SphereScan does the rest.
 
 ## How to use it
 
-1. **Open SphereScan.** A page opens in your web browser. (It only runs on your own computer. Nothing is uploaded.)
+1. **Open SphereScan.** It opens in its own window, like any other app. (It only runs on your own computer. Nothing is uploaded.)
 2. **Choose your footage folder.** Pick the folder your camera files are in, then pick **one** recording from the list. If your camera saved two files for one recording, SphereScan joins them for you.
 3. **Slide the detail level.** 1 is fastest, 4 is best quality. The page shows how long each level should take on *your* computer.
-4. **Press Go.** A bar shows how far along it is and roughly how much time is left. You can close the page; the work carries on. Just keep the computer on, awake and plugged in.
+4. **Press Go.** A bar shows how far along it is and roughly how much time is left. **Keep SphereScan's window open** (you can minimise it). Closing it stops the render. Also keep the computer on, awake and plugged in.
 5. **Look at your model.** When it finishes, it appears on the page. Drag to turn it, scroll to zoom.
 
 Your model is saved in a folder called **SphereScan 3D models**, next to your footage.
@@ -42,7 +42,8 @@ Your model is a **.glb** file. To look at it again, scroll to the bottom of Sphe
 | "No recordings found" | You picked the wrong folder. Pick the folder that contains the `.insv`, `.360` or `.osv` files (a folder inside it is fine). |
 | "Your graphics card ran out of memory" | SphereScan already retries with less detail by itself. If it still stops, close other programs and press Go again, or choose a lower detail level. |
 | "Nothing has happened for a few minutes" | It may just be slow on a hard step. Wait a while longer. If you give up, press **Cancel** and try level 1. |
-| The page closed by accident | Open SphereScan again. If a render is running, the page picks it up where it was. |
+| You refreshed the window by accident | Nothing is lost. The window picks up where the render was. |
+| You closed the window during a render | Closing SphereScan stops the render, so it has to be started again. SphereScan asks you to confirm before closing while a render is running. |
 | The estimate was wrong | Estimates are rough and get better after each run on your computer. |
 
 ## About

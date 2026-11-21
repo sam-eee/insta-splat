@@ -18,7 +18,7 @@ from .progress import StageParser, eta_seconds, human_left, mapping_time_fractio
 from .footage import Capture, jpeg_size
 from .hardware import Hardware, device_env
 from .presets import DETAILS, FORMATS
-from .util import IS_WINDOWS, engine_env, find_executable, popen_flags
+from .util import IS_WINDOWS, child_flags, engine_env, find_executable, popen_flags
 
 WORK_MARKER = ".spherescan-work"
 OOM_ADVICE = ("What to do: close other programs that use the graphics card (games, video calls, other 3D or AI "
@@ -79,7 +79,19 @@ class Job:
     def start(self) -> None:
         self.state = "running"
         self.started = time.time()
-        threading.Thread(target=self._main, daemon=True).start()
+        self._thread = threading.Thread(target=self._main, daemon=True)
+        self._thread.start()
+
+    def wait(self, timeout: float) -> bool:
+        """Block until the run has ended (or the timeout passes). True if it ended."""
+        t = getattr(self, "_thread", None)
+        if t is not None:
+            t.join(timeout)
+            return not t.is_alive()
+        return True
+
+    def progress_started(self) -> bool:
+        return any(l.startswith("step") for l in self.log)
 
     def idle_s(self) -> float:
         return max(0.0, time.time() - self.last_output) if self.last_output and self.state == "running" else 0.0
@@ -116,6 +128,7 @@ class Job:
 
     def _main(self) -> None:
         actual: dict = {}
+        work = None
         try:
             spirula = find_spirula()
             if not spirula and not self.dry_run:
@@ -182,6 +195,8 @@ class Job:
                 self.result, self.state, self.overall, self.stage_progress, self.eta_s = str(result), "done", 1.0, 1.0, 0.0
         except Cancelled:
             self.state, self.message = "cancelled", "Cancelled."
+            if work is not None and not self.keep_work:
+                _remove_work(work)           # nothing can resume a stopped run, so do not leave gigabytes behind
         except StageError as e:
             self.state, self.message = "failed", str(e)
         except Exception as e:      # never leave the GUI waiting on a dead thread
@@ -327,7 +342,7 @@ class Job:
         self._map_t0 = t0
         try:
             self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                          text=True, errors="replace", env=env, **popen_flags())
+                                          text=True, errors="replace", env=env, **child_flags())
         except OSError as e:
             raise StageError(f"Could not start Spirula: {e}")
         parser = StageParser(self.stage)

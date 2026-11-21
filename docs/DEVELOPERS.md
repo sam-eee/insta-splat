@@ -18,7 +18,7 @@ Everything here is free software. Each download bundles an unmodified Spirula St
 
 ## Using it
 
-1. Download **SphereScan** for your system from the Releases page and double-click it (Windows: `SphereScan.exe`; macOS: `SphereScan.app`; Linux: `SphereScan`). Nothing else to install: Spirula Studio is inside. A page opens in your browser, and the app quits by itself when you close the page (a run in progress is never interrupted).
+1. Download **SphereScan** for your system from the Releases page and double-click it (Windows: `SphereScan.exe`; macOS: `SphereScan.app`; Linux: `SphereScan`). Nothing else to install: Spirula Studio is inside. It opens in its own window, and closing that window quits the app and stops any render in progress (see "The window is the whole app" below).
    Unsigned apps trigger a warning the first time: Windows SmartScreen "More info > Run anyway", macOS right-click > Open.
 2. **Choose your footage folder.** Recordings are found and matched for you:
    - Insta360 `.insv`: the `_00_` and `_10_` lens files are paired, split chapters are joined, `LRV_` previews are ignored. A single `.insv` that holds both lenses also works.
@@ -77,3 +77,9 @@ Verified here: scanning/matching, estimates, hardware probing, the full pipeline
 Use `--dry-run` and `--keep-work` to inspect.
 
 See [MAINTENANCE.md](MAINTENANCE.md) for how upstream updates are handled.
+
+## The window is the whole app
+
+SphereScan opens in a browser **app window** (Chrome, Edge, Brave or Chromium with `--app=`, using its own profile; the default browser if none is found; `SPHERESCAN_BROWSER=default` forces that, `SPHERESCAN_NO_WINDOW=1` opens nothing). The page holds one open `/api/live` connection. When the window closes the connection drops, and after a 12 second grace (so a reload is fine) SphereScan **cancels any render, kills Spirula, removes the unfinished work folder, and quits**. A timer heartbeat was not used because browsers slow timers to once a minute in hidden windows. If the computer sleeps, the gap is forgiven. On Linux Spirula is also started with a parent-death signal so it stops if SphereScan is killed outright; on Windows and macOS that case is not covered. `beforeunload` makes the window ask before closing mid-render, and there is a **Quit SphereScan** link.
+
+On Linux, `spherescan install-launcher` adds a menu entry (and `remove-launcher` removes it).

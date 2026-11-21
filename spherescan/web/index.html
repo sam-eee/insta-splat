@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SphereScan</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mute:#5c6370;--line:#dde1e7;--accent:#2563eb;--accent-ink:#fff;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--soft:#eef2ff}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1115;--card:#181b21;--ink:#eceef2;--mute:#9aa3b2;--line:#2a2f38;--accent:#5b8def;--accent-ink:#0b1020;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--soft:#1c2336}}
@@ -74,7 +75,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
   <h1>SphereScan</h1>
   <div id="busy" class="card hidden" style="border-color:var(--accent);background:var(--soft)" role="status">
     <b>A render is already underway.</b> <span id="busydesc"></span>
-    <div class="small" style="margin-top:4px">SphereScan can only run one render at a time, so you can start another once this one finishes. You can leave this page open or close it; the render keeps going.</div>
+    <div class="small" style="margin-top:4px">SphereScan can only run one render at a time, so you can start another once this one finishes. Keep this window open (you can minimise it): closing SphereScan stops the render.</div>
   </div>
   <div id="hw"><span class="chip">Checking your computer…</span></div>
   <div id="problems"></div>
@@ -141,7 +142,8 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
   </section>
   <footer class="help" style="text-align:center;margin-top:24px">
     Free software (GPLv3): SphereScan and the bundled <a href="https://github.com/harry7557558/spirula-studio" target="_blank" rel="noopener">Spirula Studio</a>.
-    <a href="/legal" target="_blank">Licences and source code</a>
+    <a href="/legal" target="_blank">Licences and source code</a> ·
+    <a href="#" id="quit">Quit SphereScan</a>
   </footer>
 </main>
 <script src="/viewer.js"></script>
@@ -151,6 +153,9 @@ const $=id=>document.getElementById(id);
 const api=(p,b)=>fetch("/api/"+p,{method:b?"POST":"GET",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
 const FORMATS=__FORMATS__;
 let caps=[],sel=new Set(),levels=[],hwProblems=[],busy=false,outDir="",defOut="";
+$("quit").onclick=async e=>{e.preventDefault();
+  if(busy&&!confirm("A render is running. Quitting stops it and the work so far is lost. Quit anyway?"))return;
+  busy=false;await api("quit",{});document.body.innerHTML='<main style="padding:40px 16px"><h1>SphereScan has closed.</h1><p class="sub">You can close this window.</p></main>';setTimeout(()=>window.close(),500)};
 const hm=sec=>{const m=Math.round(sec/60);return m<60?m+" min":Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min"};
 const dur=s=>{const m=Math.round(s/60);return m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min"};
 
@@ -158,7 +163,10 @@ for(const f of FORMATS){const o=document.createElement("option");o.value=f.key;o
 const showHint=()=>{$("fmthint").textContent=FORMATS.find(f=>f.key===$("fmt").value).hint};
 $("fmt").onchange=showHint;showHint();
 
-setInterval(()=>api("ping").catch(()=>{}),4000);api("ping");
+// The app lives exactly as long as this window: this connection tells it the window is open, and when the
+// window closes the app stops any render and quits. (EventSource reconnects by itself after a reload or a hiccup.)
+const live=new EventSource("/api/live?token="+encodeURIComponent(TOKEN));
+addEventListener("beforeunload",e=>{if(busy){e.preventDefault();e.returnValue="";return ""}});
 api("hardware").then(h=>{
   if(!h.ready){$("hw").innerHTML='<span class="chip">Could not read hardware</span>';return}
   $("hw").innerHTML=`<span class="chip">${esc(h.summary)}</span>${h.decode?`<span class="chip">${esc(h.decode)}</span>`:""}`+h.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("");
@@ -327,7 +335,7 @@ async function pollOnce(){
   const left=(s.state==="running"&&s.eta_text)?` · ${s.eta_text} left`:"";
   $("pmeta").textContent=`${Math.round(s.overall*100)}% overall · ${hm(s.elapsed||0)} elapsed${left}`;
   $("eta").textContent=left?"Time left is a rough estimate and may not be exact.":"";
-  $("ptitle").textContent={running:"Working… you can leave this running",done:"Your 3D model is ready",failed:"That did not work",cancelled:"Cancelled"}[s.state]||"";
+  $("ptitle").textContent={running:"Working… keep this window open",done:"Your 3D model is ready",failed:"That did not work",cancelled:"Cancelled"}[s.state]||"";
   paintHealth(s);
   if(s.state==="running")return true;
   busy=false;refreshGo();$("cancel").classList.add("hidden");
