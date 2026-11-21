@@ -3,6 +3,8 @@
 Pick the folder with your 360 footage, choose a detail level, press **Go**. You get a textured 3D mesh.
 It is a one-page front end for the unmodified [Spirula Studio](https://github.com/harry7557558/spirula-studio) (GPLv3).
 
+Licensed under the GNU GPLv3 (see `LICENSE`), the same licence as Spirula Studio.
+
 ## Using it
 
 1. Run `python -m insta_splat` (or the packaged app). A page opens in your browser.
