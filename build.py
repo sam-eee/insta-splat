@@ -4,9 +4,9 @@ Put Spirula Studio under vendor/ first (the release workflow does this) and it i
 bundled inside, so the finished file needs nothing installed. PyInstaller cannot
 cross-compile: run this on each operating system you want a build for.
 
-  Windows -> dist/InstaSplat.exe        (one file, no console window)
-  Linux   -> dist/InstaSplat            (one file)
-  macOS   -> dist/InstaSplat.app        (an app; zip or dmg it to share)
+  Windows -> dist/SphereScan.exe        (one file, no console window)
+  Linux   -> dist/SphereScan            (one file)
+  macOS   -> dist/SphereScan.app        (an app; zip or dmg it to share)
 """
 
 import argparse
@@ -22,8 +22,8 @@ SEP = os.pathsep
 
 def command(onefile_mac: bool = False) -> list:
     system = platform.system()
-    cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--name", "InstaSplat",
-           "--add-data", f"{ROOT / 'insta_splat' / 'web'}{SEP}insta_splat/web",
+    cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--name", "SphereScan",
+           "--add-data", f"{ROOT / 'spherescan' / 'web'}{SEP}spherescan/web",
            "--add-data", f"{ROOT / 'LICENSE'}{SEP}.",
            "--add-data", f"{ROOT / 'THIRD_PARTY.md'}{SEP}.",
            "--add-data", f"{ROOT / 'SPIRULA_VERSION'}{SEP}."]

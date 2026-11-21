@@ -19,7 +19,7 @@ from .hardware import Hardware, device_env
 from .presets import DETAILS, FORMATS
 from .util import IS_WINDOWS, find_executable, popen_flags
 
-WORK_MARKER = ".insta-splat-work"
+WORK_MARKER = ".spherescan-work"
 
 
 class Cancelled(Exception):
@@ -31,7 +31,7 @@ class StageError(Exception):
 
 
 def find_spirula() -> Optional[str]:
-    return find_executable("spirula", "INSTA_SPLAT_SPIRULA")
+    return find_executable("spirula", "SPHERESCAN_SPIRULA")
 
 
 @dataclass
@@ -87,7 +87,7 @@ class Job:
         try:
             spirula = find_spirula()
             if not spirula and not self.dry_run:
-                raise StageError("Spirula Studio was not found. Place it in the 'vendor' folder or set INSTA_SPLAT_SPIRULA.")
+                raise StageError("Spirula Studio was not found. Place it in the 'vendor' folder or set SPHERESCAN_SPIRULA.")
             spirula = spirula or "spirula"
             detail = DETAILS[self.detail_level]
             fmt = FORMATS[self.format_key]
@@ -97,7 +97,7 @@ class Job:
                               (f"_plus{len(self.captures) - 1}" if len(self.captures) > 1 else ""))
             work = out_dir / f".{name}_work"
             work.mkdir(exist_ok=True)
-            (work / WORK_MARKER).write_text("created by Insta Splat; safe to delete\n")
+            (work / WORK_MARKER).write_text("created by SphereScan; safe to delete\n")
 
             duration = sum(c.duration_s for c in self.captures)
             lenses = 2 if self.captures[0].kind != "gopro" else 10

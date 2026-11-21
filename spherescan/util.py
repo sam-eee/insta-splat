@@ -41,7 +41,7 @@ def config_dir() -> Path:
         base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    d = base / "insta-splat"
+    d = base / "spherescan"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

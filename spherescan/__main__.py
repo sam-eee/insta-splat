@@ -1,4 +1,4 @@
-"""Command line: `insta-splat` opens the app; the subcommands do the same without a window."""
+"""Command line: `spherescan` opens the app; the subcommands do the same without a window."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def main(argv=None) -> int:
         from .server import tk_pick
         tk_pick()
         return 0
-    ap = argparse.ArgumentParser(prog="insta-splat", description=__doc__)
+    ap = argparse.ArgumentParser(prog="spherescan", description=__doc__)
     ap.add_argument("--version", action="version", version=__version__)
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("gui", help="open the app (default)")

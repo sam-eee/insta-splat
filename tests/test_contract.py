@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from insta_splat import memory, recipe
-from insta_splat.presets import DETAILS, FORMATS
+from spherescan import memory, recipe
+from spherescan.presets import DETAILS, FORMATS
 
 SRC = os.environ.get("SPIRULA_SRC")
 

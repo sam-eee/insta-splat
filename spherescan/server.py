@@ -66,7 +66,7 @@ class App:
         self.folder = str(p)
         self.captures = {c.id: c for c in caps}
         return {"folder": self.folder, "captures": [c.to_dict() for c in caps],
-                "default_out": str(p / "Insta Splat 3D models")}
+                "default_out": str(p / "SphereScan 3D models")}
 
     def _selected(self, ids: list) -> list:
         return [self.captures[i] for i in ids if i in self.captures]
@@ -97,7 +97,7 @@ class App:
         ok, why = est.available(DETAILS[level], self.hw)
         if not ok:
             return {"error": why}
-        out = body.get("out_dir") or str(Path(self.folder) / "Insta Splat 3D models")
+        out = body.get("out_dir") or str(Path(self.folder) / "SphereScan 3D models")
         self.job = Job(captures=caps, detail_level=level, format_key=fmt, out_dir=out,
                        hw=self.hw, keep_work=bool(body.get("keep_work")))
         self.job.start()
@@ -153,7 +153,7 @@ def pick_folder() -> str:
         rc, out = run(["powershell", "-NoProfile", "-STA", "-Command", ps], 600)
         return out.strip().splitlines()[-1] if rc == 0 and out.strip() else ""
     cmd = [sys.executable, "--pick-folder"] if getattr(sys, "frozen", False) else \
-          [sys.executable, "-m", "insta_splat", "--pick-folder"]
+          [sys.executable, "-m", "spherescan", "--pick-folder"]
     rc, out = run(cmd, 600)
     if rc == 0 and out.strip():
         return out.strip().splitlines()[-1]
@@ -176,6 +176,21 @@ def tk_pick() -> None:
         print(filedialog.askdirectory(title="Choose the folder with your footage") or "")
     except Exception:
         sys.exit(1)
+
+
+def legal_text() -> str:
+    """Our notice, the licences of what we bundle, and where to get the source."""
+    from .util import app_root
+    root = app_root()
+    parts = []
+    for name in ("THIRD_PARTY.md", "SPIRULA_VERSION"):
+        f = root / name
+        if f.exists():
+            parts.append(f"===== {name} =====\n" + f.read_text(encoding="utf-8", errors="replace"))
+    for f in [root / "LICENSE", *sorted((root / "vendor" / "licenses").rglob("*"))]:
+        if f.is_file():
+            parts.append(f"===== {f.relative_to(root)} =====\n" + f.read_text(encoding="utf-8", errors="replace"))
+    return "\n\n".join(parts) or "Licence files were not found next to this app."
 
 
 def make_handler(app: App):
@@ -206,6 +221,8 @@ def make_handler(app: App):
                 fmts = json.dumps([{"key": f.key, "label": f.label, "hint": f.hint} for f in FORMATS.values()])
                 html = (WEB / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", app.token).replace("__FORMATS__", fmts)
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
+            if path == "/legal":
+                return self._send(200, legal_text().encode(), "text/plain; charset=utf-8")
             if path.startswith("/api/") and self.headers.get("X-Token") == app.token:
                 if path == "/api/hardware":
                     return self._json(app.hardware())
@@ -240,9 +257,9 @@ def make_handler(app: App):
 
 def serve(open_browser: bool = True) -> None:
     app = App()
-    httpd = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("INSTA_SPLAT_PORT", "0"))), make_handler(app))
+    httpd = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("SPHERESCAN_PORT", "0"))), make_handler(app))
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"Insta Splat is running at {url}  (it quits when you close the page)")
+    print(f"SphereScan is running at {url}  (it quits when you close the page)")
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     def watchdog():

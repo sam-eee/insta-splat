@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Insta Splat</title>
+<title>SphereScan</title>
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mute:#5c6370;--line:#dde1e7;--accent:#2563eb;--accent-ink:#fff;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--soft:#eef2ff}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1115;--card:#181b21;--ink:#eceef2;--mute:#9aa3b2;--line:#2a2f38;--accent:#5b8def;--accent-ink:#0b1020;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--soft:#1c2336}}
@@ -59,7 +59,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
 </head>
 <body>
 <main>
-  <h1>Insta Splat</h1>
+  <h1>SphereScan</h1>
   <p class="sub">Turn 360° footage into a 3D model. Three choices, then press Go.</p>
   <div id="hw"><span class="chip">Checking your computer…</span></div>
   <div id="problems"></div>
@@ -105,6 +105,10 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <p id="perr" class="bad"></p>
     <details><summary>Technical details</summary><pre id="log"></pre></details>
   </section>
+  <footer class="help" style="text-align:center;margin-top:24px">
+    Free software (GPLv3): SphereScan and the bundled <a href="https://github.com/harry7557558/spirula-studio" target="_blank" rel="noopener">Spirula Studio</a>.
+    <a href="/legal" target="_blank">Licences and source code</a>
+  </footer>
 </main>
 <script>
 const TOKEN="__TOKEN__";

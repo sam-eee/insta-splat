@@ -245,7 +245,7 @@ def _test_hwaccel(ffmpeg: str, hw: str) -> Optional[bool]:
 
 
 def plan_decode(gpu: Optional[Gpu], verify: bool = True) -> DecodePlan:
-    ffmpeg = find_executable("ffmpeg", "INSTA_SPLAT_FFMPEG")
+    ffmpeg = find_executable("ffmpeg", "SPHERESCAN_FFMPEG")
     if not ffmpeg:
         return DecodePlan(None, None, False,
                           "No separate video helper needed: Spirula decodes video itself where it can.")

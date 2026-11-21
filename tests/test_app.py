@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import launcher, mp4
-from insta_splat import estimate, footage, hardware, memory, recipe
-from insta_splat.pipeline import Job
-from insta_splat.presets import DETAILS, FORMATS
+from spherescan import estimate, footage, hardware, memory, recipe
+from spherescan.pipeline import Job
+from spherescan.presets import DETAILS, FORMATS
 
 
 def fake_hw(vram=12.0, hwaccel=None):
@@ -120,7 +120,7 @@ class Memory(unittest.TestCase):
 
 class Packaging(unittest.TestCase):
     def test_bundled_spirula_is_found_under_vendor_and_made_executable(self):
-        import insta_splat.util as u
+        import spherescan.util as u
         with tempfile.TemporaryDirectory() as t:
             nested = Path(t) / "vendor" / "spirula" / "Spirula Studio.app" / "Contents" / "MacOS"
             nested.mkdir(parents=True)
@@ -128,19 +128,19 @@ class Packaging(unittest.TestCase):
             exe.write_text("x")
             if os.name != "nt":
                 exe.chmod(0o644)
-            old = os.environ.pop("INSTA_SPLAT_SPIRULA", None)
+            old = os.environ.pop("SPHERESCAN_SPIRULA", None)
             u.app_root = lambda: Path(t)
             try:
-                self.assertEqual(u.find_executable("spirula", "INSTA_SPLAT_SPIRULA"), str(exe))
+                self.assertEqual(u.find_executable("spirula", "SPHERESCAN_SPIRULA"), str(exe))
                 if os.name != "nt":
                     self.assertTrue(os.access(exe, os.X_OK))
             finally:
                 u.app_root = lambda: Path(u.__file__).resolve().parent.parent
                 if old is not None:
-                    os.environ["INSTA_SPLAT_SPIRULA"] = old
+                    os.environ["SPHERESCAN_SPIRULA"] = old
 
     def test_app_quits_itself_after_the_page_closes_but_not_during_a_run(self):
-        from insta_splat.server import App
+        from spherescan.server import App
         app = App.__new__(App)
         app.job, app.started = None, time.time() - 1000
         app.last_ping = app.started
@@ -155,8 +155,63 @@ class Packaging(unittest.TestCase):
     def test_build_command_bundles_web_and_entry_point(self):
         import build
         cmd = " ".join(build.command())
-        self.assertIn("insta_splat/web", cmd)
+        self.assertIn("spherescan/web", cmd)
         self.assertTrue(cmd.endswith("run_app.py"))
+
+
+class Legal(unittest.TestCase):
+    def test_licences_are_extracted_and_legal_page_lists_them(self):
+        import io
+        import tarfile
+        sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+        import fetch_spirula_legal as f
+        with tempfile.TemporaryDirectory() as t:
+            tgz = Path(t) / "s.tar.gz"
+            with tarfile.open(tgz, "w:gz") as tf:
+                for name, data in (("spirula-1/LICENSE", b"GPL TEXT"), ("spirula-1/LICENSES/MIT-X.txt", b"MIT"),
+                                   ("spirula-1/src/main.cpp", b"code")):
+                    ti = tarfile.TarInfo(name); ti.size = len(data)
+                    tf.addfile(ti, io.BytesIO(data))
+            out = Path(t) / "vendor" / "licenses" / "spirula-studio"
+            written = f.extract_licenses(tgz, out)
+            self.assertEqual(len(written), 2)
+            self.assertEqual((out / "LICENSE").read_text(), "GPL TEXT")
+            self.assertFalse((out / "src").exists())
+            (Path(t) / "THIRD_PARTY.md").write_text("notice")
+            import spherescan.util as u
+            from spherescan.server import legal_text
+            old = u.app_root
+            u.app_root = lambda: Path(t)
+            try:
+                text = legal_text()
+            finally:
+                u.app_root = old
+            self.assertIn("notice", text)
+            self.assertIn("GPL TEXT", text)
+
+    def test_missing_licence_is_a_hard_error(self):
+        import io
+        import tarfile
+        sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+        import fetch_spirula_legal as f
+        with tempfile.TemporaryDirectory() as t:
+            tgz = Path(t) / "s.tar.gz"
+            with tarfile.open(tgz, "w:gz") as tf:
+                ti = tarfile.TarInfo("x/README"); ti.size = 1
+                tf.addfile(ti, io.BytesIO(b"."))
+            with self.assertRaises(SystemExit):
+                f.extract_licenses(tgz, Path(t) / "o")
+
+    def test_page_and_bundle_carry_the_notices(self):
+        root = Path(__file__).parent.parent
+        self.assertIn("/legal", (root / "spherescan/web/index.html").read_text())
+        notice = (root / "THIRD_PARTY.md").read_text()
+        for needle in ("unmodified", "Written offer", "patent"):
+            self.assertIn(needle, notice)
+        self.assertIn("THIRD_PARTY.md", (root / "build.py").read_text())
+        rel = (root / ".github/workflows/release.yml").read_text()
+        for needle in ("fetch_spirula_legal.py", "source.tar.gz", "SHA256SUMS"):
+            self.assertIn(needle, rel)
 
 
 class Recipe(unittest.TestCase):
@@ -174,7 +229,7 @@ class Pipeline(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()
         self.d = Path(self.t.name)
-        os.environ["INSTA_SPLAT_SPIRULA"] = launcher(self.d)
+        os.environ["SPHERESCAN_SPIRULA"] = launcher(self.d)
         os.environ["XDG_CONFIG_HOME"] = str(self.d / "cfg")
         os.environ["APPDATA"] = str(self.d / "cfg")
         self.addCleanup(self.t.cleanup)
@@ -242,7 +297,7 @@ class Pipeline(unittest.TestCase):
     def test_dry_run_prints_commands_and_runs_nothing(self):
         src = self.d / "in"
         mp4(src / "IMG_x.insv", 30)
-        os.environ.pop("INSTA_SPLAT_SPIRULA")
+        os.environ.pop("SPHERESCAN_SPIRULA")
         job = self.run_job(footage.scan_folder(str(src)), dry_run=True)
         self.assertEqual(job.state, "done", job.message)
         self.assertEqual([c[1] for c in job.commands], ["sam", "sfm", "train", "mesh"])
