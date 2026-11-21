@@ -447,6 +447,19 @@ class AppWindow(unittest.TestCase):
                 self.assertFalse(window.remove_launcher())
 
 
+class Readme(unittest.TestCase):
+    def test_every_image_the_readme_shows_exists(self):
+        import re
+        root = Path(__file__).parent.parent
+        text = (root / "README.md").read_text(encoding="utf-8")
+        images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
+        self.assertGreaterEqual(len(images), 2)
+        for img in images:
+            f = root / img
+            self.assertTrue(f.is_file() and f.stat().st_size > 10_000, img)
+            self.assertEqual(f.read_bytes()[:4], b"\x89PNG")
+
+
 class Packaging(unittest.TestCase):
     def test_bundled_spirula_is_found_under_vendor_and_made_executable(self):
         import spherescan.util as u

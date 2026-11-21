@@ -7,6 +7,16 @@ You choose a video, move a slider, and press **Go**. SphereScan does the rest.
 > **Early version.** Ready-made downloads are not published yet. Until they are, someone technical needs to set it up
 > (see the [developer notes](docs/DEVELOPERS.md)). Everything below describes how it works once it is running.
 
+## What it looks like
+
+Everything is on one page. Choose your footage, slide the detail level, and the time estimate for your computer updates as you go.
+
+![SphereScan's setup page: footage folder, detail slider with time estimates, and a Go button](docs/images/setup.png)
+
+While it works, a bar shows how far along it is, what it is doing, and roughly how long is left.
+
+![SphereScan while a render is running: progress bar, stages, and time left](docs/images/progress.png)
+
 ## What you need
 
 - A Windows, Mac or Linux computer **with a graphics card**. Gaming and creator laptops are fine. Very basic or very old computers may be too slow or may not work.
@@ -45,6 +55,10 @@ Your model is a **.glb** file. To look at it again, scroll to the bottom of Sphe
 | You refreshed the window by accident | Nothing is lost. The window picks up where the render was. |
 | You closed the window during a render | Closing SphereScan stops the render, so it has to be started again. SphereScan asks you to confirm before closing while a render is running. |
 | The estimate was wrong | Estimates are rough and get better after each run on your computer. |
+
+## Do I have to install it?
+
+No. There is no installer. SphereScan is a single file you can keep anywhere, and it opens in its own window. It keeps a few small settings files (like how fast your computer has been) in your user folder.
 
 ## About
 

@@ -15,8 +15,79 @@ IS_MAC = platform.system() == "Darwin"
 IS_LINUX = platform.system() == "Linux"
 
 
+# macOS has neither a parent-death signal nor job objects, so the engine is started under a tiny shell
+# supervisor: it runs Spirula, and kills the whole process group if SphereScan disappears (even by SIGKILL).
+_MAC_SUPERVISOR = r'''
+parent="$1"; shift
+"$@" &
+child=$!
+( while kill -0 "$parent" 2>/dev/null; do sleep 1; done; kill -9 -$$ 2>/dev/null ) &
+watcher=$!
+wait "$child"; rc=$?
+kill "$watcher" 2>/dev/null
+exit $rc
+'''
+
+_JOB = None
+
+
+def _windows_job():
+    """One job object for SphereScan's lifetime. Windows kills everything in it when SphereScan exits, however it exits."""
+    global _JOB
+    if _JOB is not None:
+        return _JOB or None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+        class IO(ctypes.Structure):
+            _fields_ = [(n, ctypes.c_ulonglong) for n in ("a", "b", "c", "d", "e", "f")]
+
+        class BASIC(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD), ("SchedulingClass", wintypes.DWORD)]
+
+        class EXT(ctypes.Structure):
+            _fields_ = [("Basic", BASIC), ("Io", IO), ("ProcessMemoryLimit", ctypes.c_size_t),
+                        ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                        ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        k32.CreateJobObjectW.restype = wintypes.HANDLE
+        job = k32.CreateJobObjectW(None, None)
+        info = EXT()
+        info.Basic.LimitFlags = 0x2000            # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not job or not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            _JOB = False
+            return None
+        _JOB = (k32, job)
+        return _JOB
+    except Exception:
+        _JOB = False
+        return None
+
+
+def spawn_engine(cmd, **kwargs):
+    """Start Spirula so that it cannot outlive SphereScan, whichever way SphereScan ends."""
+    if IS_WINDOWS:
+        p = subprocess.Popen(cmd, **popen_flags(), **kwargs)
+        j = _windows_job()
+        if j:
+            try:
+                j[0].AssignProcessToJobObject(j[1], int(p._handle))
+            except Exception:
+                pass
+        return p
+    if IS_MAC:
+        return subprocess.Popen(["/bin/sh", "-c", _MAC_SUPERVISOR, "sh", str(os.getpid()), *map(str, cmd)],
+                                **popen_flags(), **kwargs)
+    return subprocess.Popen(cmd, **child_flags(), **kwargs)
+
+
 def child_flags() -> dict:
-    """Flags for the engine (Spirula): like popen_flags, plus on Linux it is stopped if SphereScan dies abruptly."""
+    """Flags for the engine (Spirula) on Linux: stopped by the kernel if SphereScan dies abruptly."""
     f = popen_flags()
     if IS_LINUX:
         def die_with_parent():

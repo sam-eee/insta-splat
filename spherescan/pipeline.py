@@ -18,7 +18,7 @@ from .progress import StageParser, eta_seconds, human_left, mapping_time_fractio
 from .footage import Capture, jpeg_size
 from .hardware import Hardware, device_env
 from .presets import DETAILS, FORMATS
-from .util import IS_WINDOWS, child_flags, engine_env, find_executable, popen_flags
+from .util import IS_WINDOWS, engine_env, find_executable, popen_flags, spawn_engine
 
 WORK_MARKER = ".spherescan-work"
 OOM_ADVICE = ("What to do: close other programs that use the graphics card (games, video calls, other 3D or AI "
@@ -341,8 +341,8 @@ class Job:
         t0 = time.time()
         self._map_t0 = t0
         try:
-            self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                          text=True, errors="replace", env=env, **child_flags())
+            self._proc = spawn_engine(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                      text=True, errors="replace", env=env)
         except OSError as e:
             raise StageError(f"Could not start Spirula: {e}")
         parser = StageParser(self.stage)

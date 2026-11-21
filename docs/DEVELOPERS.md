@@ -83,3 +83,7 @@ See [MAINTENANCE.md](MAINTENANCE.md) for how upstream updates are handled.
 SphereScan opens in a browser **app window** (Chrome, Edge, Brave or Chromium with `--app=`, using its own profile; the default browser if none is found; `SPHERESCAN_BROWSER=default` forces that, `SPHERESCAN_NO_WINDOW=1` opens nothing). The page holds one open `/api/live` connection. When the window closes the connection drops, and after a 12 second grace (so a reload is fine) SphereScan **cancels any render, kills Spirula, removes the unfinished work folder, and quits**. A timer heartbeat was not used because browsers slow timers to once a minute in hidden windows. If the computer sleeps, the gap is forgiven. On Linux Spirula is also started with a parent-death signal so it stops if SphereScan is killed outright; on Windows and macOS that case is not covered. `beforeunload` makes the window ask before closing mid-render, and there is a **Quit SphereScan** link.
 
 On Linux, `spherescan install-launcher` adds a menu entry (and `remove-launcher` removes it).
+
+## README screenshots
+
+`python scripts/screenshots.py` regenerates `docs/images/*.png` from the real page with invented footage and a stand-in computer (no personal data). It needs Chrome, Edge or Chromium.
