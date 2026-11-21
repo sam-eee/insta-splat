@@ -47,9 +47,9 @@ def config_dir() -> Path:
 
 
 def app_root() -> Path:
-    """The folder holding vendor/ (bundled spirula and ffmpeg)."""
+    """Where bundled files live: PyInstaller's unpack folder, else the project folder."""
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
     return Path(__file__).resolve().parent.parent
 
 
@@ -67,13 +67,20 @@ def save_json(path: Path, data) -> None:
 
 
 def find_executable(name: str, env_var: Optional[str] = None) -> Optional[str]:
-    """env override, then vendor/, then PATH."""
+    """env override, then anything bundled under vendor/, then PATH."""
     import shutil
     if env_var and os.environ.get(env_var):
         p = os.environ[env_var]
         return p if Path(p).exists() else None
     exe = name + (".exe" if IS_WINDOWS else "")
-    for cand in (app_root() / "vendor" / exe, app_root() / "vendor" / name / exe):
-        if cand.exists():
-            return str(cand)
+    vendor = app_root() / "vendor"
+    if vendor.is_dir():
+        for cand in sorted(vendor.rglob(exe), key=lambda c: len(c.parts)):
+            if cand.is_file():
+                if not IS_WINDOWS and not os.access(cand, os.X_OK):
+                    try:
+                        cand.chmod(cand.stat().st_mode | 0o111)    # data files can lose their exec bit
+                    except OSError:
+                        continue
+                return str(cand)
     return shutil.which(name)

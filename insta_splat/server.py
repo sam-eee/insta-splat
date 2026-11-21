@@ -8,6 +8,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,8 @@ class App:
         self.captures: dict = {}
         self.folder = ""
         self.job: Optional[Job] = None
+        self.last_ping = time.time()
+        self.started = time.time()
         self._hw_ready = threading.Event()
         threading.Thread(target=self._probe, daemon=True).start()
 
@@ -100,6 +103,18 @@ class App:
         self.job.start()
         return {"ok": True}
 
+    def ping(self) -> dict:
+        self.last_ping = time.time()
+        return {"ok": True}
+
+    def idle_for_quit(self, grace: float = 25.0, first_load: float = 90.0) -> bool:
+        """True when the page was closed and nothing is running, so the app can exit by itself."""
+        if self.job and self.job.state == "running":
+            return False
+        if self.last_ping == self.started:           # the page has never loaded
+            return time.time() - self.started > first_load
+        return time.time() - self.last_ping > grace
+
     def status(self) -> dict:
         return self.job.snapshot() if self.job else {"state": "idle"}
 
@@ -131,6 +146,12 @@ def pick_folder() -> str:
     if IS_MAC:
         rc, out = run(["osascript", "-e", 'POSIX path of (choose folder with prompt "Choose your footage folder")'], 600)
         return out.strip() if rc == 0 else ""
+    if IS_WINDOWS:
+        ps = ("Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+              "$d.Description='Choose the folder with your footage'; $f=New-Object System.Windows.Forms.Form;"
+              "$f.TopMost=$true; if($d.ShowDialog($f) -eq 'OK'){Write-Output $d.SelectedPath}")
+        rc, out = run(["powershell", "-NoProfile", "-STA", "-Command", ps], 600)
+        return out.strip().splitlines()[-1] if rc == 0 and out.strip() else ""
     cmd = [sys.executable, "--pick-folder"] if getattr(sys, "frozen", False) else \
           [sys.executable, "-m", "insta_splat", "--pick-folder"]
     rc, out = run(cmd, 600)
@@ -190,6 +211,8 @@ def make_handler(app: App):
                     return self._json(app.hardware())
                 if path == "/api/status":
                     return self._json(app.status())
+                if path == "/api/ping":
+                    return self._json(app.ping())
             self._json({"error": "not found"}, 404)
 
         def do_POST(self):
@@ -219,9 +242,16 @@ def serve(open_browser: bool = True) -> None:
     app = App()
     httpd = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("INSTA_SPLAT_PORT", "0"))), make_handler(app))
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"Insta Splat is running at {url}  (close this window to quit)")
+    print(f"Insta Splat is running at {url}  (it quits when you close the page)")
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    def watchdog():
+        while True:
+            time.sleep(3)
+            if app.idle_for_quit():
+                httpd.shutdown()
+                return
+    threading.Thread(target=watchdog, daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

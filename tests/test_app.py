@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from helpers import launcher, mp4
 from insta_splat import estimate, footage, hardware, memory, recipe
@@ -104,7 +105,8 @@ class Memory(unittest.TestCase):
         p = memory.plan(DETAILS[4], fake_hw(vram=4))
         cmd = recipe.train_cmd("s", "w", "t", DETAILS[4], p)
         self.assertEqual(cmd[cmd.index("--cap-max") + 1], str(p.cap_max))
-        self.assertIn("--max-resolution", cmd)
+        self.assertIn("--train-resolution-divisor", cmd)
+        self.assertNotIn("--max-resolution", cmd)
 
     def test_slower_when_squeezed_but_cheaper_per_step(self):
         big = estimate.estimate(DETAILS[4], 300, 2, fake_hw(vram=24))["stages"]["train"]
@@ -114,6 +116,47 @@ class Memory(unittest.TestCase):
     def test_oom_detection(self):
         self.assertTrue(memory.looks_like_oom(["x", "VK_ERROR_OUT_OF_DEVICE_MEMORY"]))
         self.assertFalse(memory.looks_like_oom(["step 10/100", "no memory leaks found"]))
+
+
+class Packaging(unittest.TestCase):
+    def test_bundled_spirula_is_found_under_vendor_and_made_executable(self):
+        import insta_splat.util as u
+        with tempfile.TemporaryDirectory() as t:
+            nested = Path(t) / "vendor" / "spirula" / "Spirula Studio.app" / "Contents" / "MacOS"
+            nested.mkdir(parents=True)
+            exe = nested / ("spirula.exe" if os.name == "nt" else "spirula")
+            exe.write_text("x")
+            if os.name != "nt":
+                exe.chmod(0o644)
+            old = os.environ.pop("INSTA_SPLAT_SPIRULA", None)
+            u.app_root = lambda: Path(t)
+            try:
+                self.assertEqual(u.find_executable("spirula", "INSTA_SPLAT_SPIRULA"), str(exe))
+                if os.name != "nt":
+                    self.assertTrue(os.access(exe, os.X_OK))
+            finally:
+                u.app_root = lambda: Path(u.__file__).resolve().parent.parent
+                if old is not None:
+                    os.environ["INSTA_SPLAT_SPIRULA"] = old
+
+    def test_app_quits_itself_after_the_page_closes_but_not_during_a_run(self):
+        from insta_splat.server import App
+        app = App.__new__(App)
+        app.job, app.started = None, time.time() - 1000
+        app.last_ping = app.started
+        self.assertTrue(app.idle_for_quit())                  # never loaded
+        app.last_ping = time.time()
+        self.assertFalse(app.idle_for_quit())                 # page open
+        app.last_ping = time.time() - 100
+        self.assertTrue(app.idle_for_quit())                  # page closed
+        app.job = type("J", (), {"state": "running"})()
+        self.assertFalse(app.idle_for_quit())                 # but never mid-run
+
+    def test_build_command_bundles_web_and_entry_point(self):
+        import build
+        cmd = " ".join(build.command())
+        self.assertIn("insta_splat/web", cmd)
+        self.assertTrue(cmd.endswith("run_app.py"))
 
 
 class Recipe(unittest.TestCase):

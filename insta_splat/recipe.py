@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from .memory import MemoryPlan
+from .memory import FULL_RES_PX, MemoryPlan
 from .presets import Detail, MeshFormat
 
 # Insta360 X-series lens: fx = fy ~ 0.27 * image width (Spirula's .insv preset
@@ -58,7 +58,8 @@ def train_cmd(spirula: str, workspace: str, train_dir: str, detail: Detail, plan
            "--output-dir-prefix", train_dir, "--output-dir-name", "run",
            "--disable-viewer", "1", "--keep-viewer-alive", "0"]
     if plan.max_resolution:
-        cmd += ["--max-resolution", str(plan.max_resolution)]
+        # --train-resolution-divisor exists in every release; --max-resolution only on newer master.
+        cmd += ["--train-resolution-divisor", f"{max(1.0, FULL_RES_PX / plan.max_resolution):.2f}"]
     if plan.progressive:
         cmd += ["--progressive-resolution", "1"]
     if WARP_TO_PINHOLE:

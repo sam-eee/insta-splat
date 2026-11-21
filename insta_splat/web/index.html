@@ -118,6 +118,7 @@ for(const f of FORMATS){const o=document.createElement("option");o.value=f.key;o
 const showHint=()=>{$("fmthint").textContent=FORMATS.find(f=>f.key===$("fmt").value).hint};
 $("fmt").onchange=showHint;showHint();
 
+setInterval(()=>api("ping").catch(()=>{}),4000);api("ping");
 api("hardware").then(h=>{
   if(!h.ready){$("hw").innerHTML='<span class="chip">Could not read hardware</span>';return}
   $("hw").innerHTML=`<span class="chip">${esc(h.summary)}</span><span class="chip">${esc(h.decode)}</span>`+h.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("");

@@ -27,6 +27,10 @@ def _captures(args) -> list:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    import os
+    for stream in ("stdout", "stderr"):          # a windowed (no-console) exe has no streams
+        if getattr(sys, stream) is None:
+            setattr(sys, stream, open(os.devnull, "w"))
     if argv[:1] == ["--pick-folder"]:
         from .server import tk_pick
         tk_pick()

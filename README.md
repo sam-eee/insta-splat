@@ -7,7 +7,8 @@ Licensed under the GNU GPLv3 (see `LICENSE`), the same licence as Spirula Studio
 
 ## Using it
 
-1. Run `python -m insta_splat` (or the packaged app). A page opens in your browser.
+1. Download **InstaSplat** for your system from the Releases page and double-click it (Windows: `InstaSplat.exe`; macOS: `InstaSplat.app`; Linux: `InstaSplat`). Nothing else to install: Spirula Studio is inside. A page opens in your browser, and the app quits by itself when you close the page (a run in progress is never interrupted).
+   Unsigned apps trigger a warning the first time: Windows SmartScreen "More info > Run anyway", macOS right-click > Open.
 2. **Choose your footage folder.** Recordings are found and matched for you:
    - Insta360 `.insv`: the `_00_` and `_10_` lens files are paired, split chapters are joined, `LRV_` previews are ignored. A single `.insv` that holds both lenses also works.
    - GoPro MAX `.360` (chapters joined) and DJI `.osv`.
@@ -18,9 +19,10 @@ Licensed under the GNU GPLv3 (see `LICENSE`), the same licence as Spirula Studio
 
 Command line: `insta-splat run FOLDER -o OUT --detail 3`, `insta-splat estimate FOLDER`, `insta-splat hardware`, `--dry-run` to print the exact Spirula commands.
 
-## Setup
+## Building the single file yourself
 
-Python 3.9+ (nothing else to install for the app). Put a Spirula Studio build in `vendor/` (or set `INSTA_SPLAT_SPIRULA`). Build with `-DSS_ENABLE_PATENTED=ON` if you want its built-in GPU video decoder. Optionally put `ffmpeg` in `vendor/` too.
+`python build.py` makes the one-file app with PyInstaller (`pip install pyinstaller` first). Put Spirula under `vendor/` beforehand to bundle it; the GitHub workflow `release.yml` does that for Windows, macOS and Linux (it fetches the release named in `SPIRULA_VERSION`) and attaches the files to a release when you push a `v*` tag. PyInstaller cannot cross-compile, so each system is built on its own runner.
+Running from source: `python -m insta_splat` with a Spirula build in `vendor/` or `INSTA_SPLAT_SPIRULA` set.
 
 ## What it does about your hardware
 
@@ -36,7 +38,7 @@ GLB opens in Windows 3D Viewer / Paint 3D (where installed), Blender, and online
 ## Status: what is verified
 
 Verified here: scanning/matching, estimates, hardware probing, the full pipeline and GUI flow **against a fake Spirula** that checks every flag we send, and every flag/format against Spirula's source (`tests/test_contract.py`).
-**Not yet verified: a real run with a real Spirula binary and real footage.** Check these first, in `insta_splat/recipe.py`:
+**Not yet verified: a real run with a real Spirula binary and real footage, and the PyInstaller builds themselves (the workflow has not been run).** The pinned release v2026.11.12 lacks `--max-resolution`, so memory saving uses `--train-resolution-divisor`. Also check that the release's Windows exe prints to a console pipe when called from the app. Check these first, in `insta_splat/recipe.py`:
 - whether your camera writes one file per lens (paired path, fixed frame spacing at an assumed 30 fps) or one two-track file (lockstep path);
 - the `meshing` training preset with `--warp-to-pinhole 1` on fisheye footage (the GUI's 360 preset differs);
 - the fisheye focal seed (0.27 x width) and the `dual-fisheye` rig on real frames;

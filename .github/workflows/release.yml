@@ -1,0 +1,61 @@
+name: Build apps
+# Builds the single-file app for Windows, macOS and Linux with Spirula bundled inside.
+# Run manually, or push a tag like v0.1.0 to also attach the files to a GitHub release.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-latest, asset: windows-vulkan-x86_64.zip, out: InstaSplat-windows.zip}
+          - {os: ubuntu-latest,  asset: ubuntu-vulkan-x86_64.zip,  out: InstaSplat-linux.zip}
+          - {os: macos-latest,   asset: macos-vulkan-arm64.dmg,    out: InstaSplat-macos.zip}
+    runs-on: ${{ matrix.os }}
+    defaults: {run: {shell: bash}}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Tests
+        run: python -m unittest discover -s tests
+      - name: Fetch the pinned Spirula release
+        run: |
+          TAG=$(tr -d '\r\n ' < SPIRULA_VERSION)
+          mkdir -p dl vendor/spirula
+          gh release download "$TAG" -R harry7557558/spirula-studio -p "*${{ matrix.asset }}" -D dl
+          ls -l dl
+          case "${{ matrix.asset }}" in
+            *.zip) 7z x -y -ovendor/spirula dl/*.zip >/dev/null ;;
+            *.dmg) hdiutil attach dl/*.dmg -mountpoint /Volumes/spirula -nobrowse -quiet
+                   cp -R /Volumes/spirula/*.app vendor/spirula/
+                   hdiutil detach /Volumes/spirula -quiet ;;
+          esac
+          find vendor -maxdepth 4 | head -30
+          shasum -a 256 dl/* | tee dl.sha256
+      - name: Build
+        run: |
+          python -m pip install pyinstaller
+          python build.py
+      - name: Smoke test the built app (Linux)
+        if: runner.os == 'Linux'
+        run: ./dist/InstaSplat hardware | tail -3
+      - name: Package
+        run: |
+          cd dist
+          if [ "$RUNNER_OS" = "macOS" ]; then ditto -c -k --keepParent InstaSplat.app ../${{ matrix.out }};
+          else 7z a ../${{ matrix.out }} InstaSplat* >/dev/null; fi
+      - uses: actions/upload-artifact@v4
+        with: {name: "${{ matrix.out }}", path: "${{ matrix.out }}"}
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release create "${{ github.ref_name }}" --generate-notes 2>/dev/null || true; gh release upload "${{ github.ref_name }}" "${{ matrix.out }}" --clobber
