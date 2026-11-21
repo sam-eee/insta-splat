@@ -33,6 +33,18 @@ Command line: `spherescan run FOLDER -o OUT --detail 3`, `spherescan estimate FO
 `python build.py` makes the one-file app with PyInstaller (`pip install pyinstaller` first). Put Spirula under `vendor/` beforehand to bundle it; the GitHub workflow `release.yml` does that for Windows, macOS and Linux (it fetches the release named in `SPIRULA_VERSION`) and attaches the files to a release when you push a `v*` tag. PyInstaller cannot cross-compile, so each system is built on its own runner.
 Running from source: `python -m spherescan` with a Spirula build in `vendor/` or `SPHERESCAN_SPIRULA` set.
 
+## Time estimates on any card (offline)
+
+SphereScan ships a library of about 130 graphics cards and 45 CPUs (`spherescan/data/*.json`) with approximate public specs: FP32 TFLOPS, memory bandwidth, memory size. Relative speed is `(TFLOPS/12.7)^0.6 x (GB/s / 360)^0.4`, where an RTX 3060 = 1.0. It is anchored on one real measured run (RTX A500 Laptop: 240 images, structure-from-motion 81 s, level-1 training about 2 h 20 min), and every finished run on a machine corrects that machine's estimates further. Cards not in the library get a rougher guess and a wider range.
+
+```
+spherescan gpus "rtx 40" --minutes 7                 # compare cards for a 7 min clip
+spherescan estimate --gpu "RTX 4090" --cpu "Ryzen 9 7950X" --minutes 7   # what-if, no hardware needed
+spherescan estimate FOLDER --gpu "RTX 3060"          # your real footage on another card
+```
+
+Wrong or missing entry? Add it to `gpus.json` or `cpus.json` in the SphereScan config folder (same format as the built-in files); yours win. Laptop parts and newer cards are marked `~` because power limits change real speed.
+
 ## What it does about your hardware
 
 - Finds GPUs (NVIDIA, AMD, Intel, Apple), graphics memory, Vulkan, RAM. Laptops with two GPUs get the faster one.

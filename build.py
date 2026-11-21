@@ -24,6 +24,7 @@ def command(onefile_mac: bool = False) -> list:
     system = platform.system()
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--name", "SphereScan",
            "--add-data", f"{ROOT / 'spherescan' / 'web'}{SEP}spherescan/web",
+           "--add-data", f"{ROOT / 'spherescan' / 'data'}{SEP}spherescan/data",
            "--add-data", f"{ROOT / 'LICENSE'}{SEP}.",
            "--add-data", f"{ROOT / 'THIRD_PARTY.md'}{SEP}.",
            "--add-data", f"{ROOT / 'SPIRULA_VERSION'}{SEP}."]

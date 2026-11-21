@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from . import gpudb
 from .util import IS_LINUX, IS_MAC, IS_WINDOWS, find_executable, run
 
 
@@ -26,6 +27,8 @@ class Gpu:
     vram_gb: Optional[float]    # None when unknown
     integrated: bool
     speed: float                # relative to an RTX 3060 = 1.0 (estimates only)
+    spec_known: bool = False    # found in the offline card library (else speed is a rough guess)
+    library_name: str = ""
 
 
 @dataclass
@@ -45,6 +48,9 @@ class Hardware:
     vulkan: Optional[bool] = None       # None = could not tell
     decode: Optional[DecodePlan] = None
     usable_vram_gb: Optional[float] = None
+    cpu_name: str = ""
+    cpu_score: float = 1.0          # 1.0 = Ryzen 5 5600X
+    cpu_known: bool = False
     problems: list = field(default_factory=list)   # block running
     notes: list = field(default_factory=list)      # informational
 
@@ -93,11 +99,19 @@ def _classify(name: str, vram_gb: Optional[float], ram_gb: Optional[float]) -> G
     else:
         vendor = "other"
     integrated = vendor == "apple" or bool(re.search(r"uhd|hd graphics|iris|radeon.*graphics$|vega \d", n))
-    speed = _apple_speed(name) if vendor == "apple" else next(
-        (s for rx, s in _SPEED if re.search(rx, n)), 0.2 if integrated else 0.6)
+    entry = gpudb.find_gpu(name)
+    if entry:
+        integrated = bool(entry.get("integrated"))
+        speed = gpudb.gpu_speed(entry)
+        if vram_gb is None and entry.get("vram_gb"):
+            vram_gb = float(entry["vram_gb"])          # the OS often cannot tell us; the library can
+    else:
+        speed = _apple_speed(name) if vendor == "apple" else next(
+            (s for rx, s in _SPEED if re.search(rx, n)), 0.2 if integrated else 0.6)
     if integrated and ram_gb and (vram_gb is None or vendor == "apple"):
         vram_gb = round(ram_gb * (0.65 if vendor == "apple" else 0.4), 1)   # shared memory
-    return Gpu(name=name.strip(), vendor=vendor, vram_gb=vram_gb, integrated=integrated, speed=speed)
+    return Gpu(name=name.strip(), vendor=vendor, vram_gb=vram_gb, integrated=integrated, speed=speed,
+               spec_known=bool(entry), library_name=entry["name"] if entry else "")
 
 
 def _ram_gb() -> Optional[float]:
@@ -184,6 +198,22 @@ def _gpus_mac(ram: Optional[float]) -> list:
     except ValueError:
         return []
     return [_classify(i.get("sppci_model", "GPU"), None, ram) for i in items]
+
+
+def _cpu_name() -> str:
+    try:
+        if IS_WINDOWS:
+            rc, out = run(["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_Processor | Select-Object -First 1).Name"], 20)
+            return out.strip() if rc == 0 else ""
+        if IS_MAC:
+            rc, out = run(["sysctl", "-n", "machdep.cpu.brand_string"])
+            return out.strip() if rc == 0 else ""
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.lower().startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
 
 
 def detect_gpus(ram: Optional[float]) -> list:
@@ -274,6 +304,8 @@ def detect(verify_decode: bool = True) -> Hardware:
     hw = Hardware(os="Windows" if IS_WINDOWS else "macOS" if IS_MAC else "Linux",
                   cpu_threads=os.cpu_count() or 1, ram_gb=ram)
     hw.gpus = detect_gpus(ram)
+    hw.cpu_name = _cpu_name()
+    hw.cpu_score, hw.cpu_known = gpudb.cpu_score(hw.cpu_name, hw.cpu_threads)
     hw.vulkan = detect_vulkan()
     best = hw.best_gpu()
     hw.usable_vram_gb = usable_vram(hw.gpus, ram)
@@ -296,3 +328,20 @@ def device_env(hw: Hardware) -> dict:
     if len(hw.gpus) > 1 and hw.best_gpu():
         return {"SS_VK_DEVICE": hw.best_gpu().name}
     return {}
+
+
+def virtual(gpu: str, cpu: Optional[str] = None, vram_gb: Optional[float] = None, ram_gb: float = 16.0,
+            gpu_decode: bool = True) -> Hardware:
+    """A computer described only by its parts, for 'how long would this take on card X' without owning it."""
+    entry = gpudb.find_gpu(gpu)
+    if not entry:
+        raise ValueError(f"'{gpu}' is not in the card library. See `spherescan gpus`, or add it to gpus.json.")
+    g = _classify(entry["name"], vram_gb if vram_gb is not None else entry.get("vram_gb"), ram_gb)
+    hw = Hardware(os="virtual", cpu_threads=16, ram_gb=ram_gb, gpus=[g], vulkan=True, usable_vram_gb=g.vram_gb)
+    c = gpudb.find_cpu(cpu) if cpu else None
+    if cpu and not c:
+        raise ValueError(f"'{cpu}' is not in the CPU library. See `spherescan gpus --cpus`, or add it to cpus.json.")
+    hw.cpu_name = c["name"] if c else "reference CPU"
+    hw.cpu_score, hw.cpu_known = (float(c["score"]), True) if c else (1.0, False)
+    hw.decode = DecodePlan("ffmpeg", "hw" if gpu_decode else None, False, "assumed")
+    return hw

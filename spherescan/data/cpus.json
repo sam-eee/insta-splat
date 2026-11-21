@@ -1,0 +1,240 @@
+{
+ "_note": "score = approximate multi-thread performance relative to a Ryzen 5 5600X (1.0). Approximate. Extend via cpus.json in the config folder.",
+ "cpus": [
+  {
+   "name": "Intel Core i5-10400",
+   "score": 0.77,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i7-10700",
+   "score": 1.09,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i9-9900K",
+   "score": 1.36,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i5-12400",
+   "score": 1.14,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i5-12600K",
+   "score": 1.55,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i7-12700K",
+   "score": 2.05,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i9-12900K",
+   "score": 2.45,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i5-13600K",
+   "score": 2.18,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i7-13700K",
+   "score": 2.73,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i9-13900K",
+   "score": 3.64,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i9-14900K",
+   "score": 3.73,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i7-1165G7",
+   "score": 0.5,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i7-1260P",
+   "score": 1.0,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i7-12700H",
+   "score": 1.41,
+   "approx": true
+  },
+  {
+   "name": "Intel Core i9-13900H",
+   "score": 1.55,
+   "approx": true
+  },
+  {
+   "name": "Intel Core Ultra 5 125H",
+   "score": 1.23,
+   "approx": true
+  },
+  {
+   "name": "Intel Core Ultra 7 155H",
+   "score": 1.41,
+   "approx": true
+  },
+  {
+   "name": "Intel Core Ultra 9 185H",
+   "score": 1.55,
+   "approx": true
+  },
+  {
+   "name": "Intel Core Ultra 7 258V",
+   "score": 0.86,
+   "approx": true
+  },
+  {
+   "name": "Intel Core Ultra 9 285K",
+   "score": 3.82,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 5 3600",
+   "score": 0.86,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 3700X",
+   "score": 1.14,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 5 5600X",
+   "score": 1.0,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 5800X",
+   "score": 1.32,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 9 5900X",
+   "score": 1.95,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 9 5950X",
+   "score": 2.59,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 5 7600X",
+   "score": 1.41,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 7700X",
+   "score": 1.73,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 7800X3D",
+   "score": 1.64,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 9 7950X",
+   "score": 3.45,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 9700X",
+   "score": 1.77,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 9 9950X",
+   "score": 3.82,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 5800H",
+   "score": 1.23,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 7 7840HS",
+   "score": 1.41,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen 9 7940HS",
+   "score": 1.64,
+   "approx": true
+  },
+  {
+   "name": "AMD Ryzen AI 9 HX 370",
+   "score": 1.82,
+   "approx": true
+  },
+  {
+   "name": "Apple M1",
+   "score": 0.71,
+   "approx": true
+  },
+  {
+   "name": "Apple M2",
+   "score": 0.79,
+   "approx": true
+  },
+  {
+   "name": "Apple M3",
+   "score": 0.95,
+   "approx": true
+  },
+  {
+   "name": "Apple M4",
+   "score": 1.36,
+   "approx": true
+  },
+  {
+   "name": "Apple M1 Pro",
+   "score": 1.14,
+   "approx": true
+  },
+  {
+   "name": "Apple M2 Pro",
+   "score": 1.35,
+   "approx": true
+  },
+  {
+   "name": "Apple M3 Pro",
+   "score": 1.27,
+   "approx": true
+  },
+  {
+   "name": "Apple M4 Pro",
+   "score": 2.0,
+   "approx": true
+  },
+  {
+   "name": "Apple M2 Max",
+   "score": 1.36,
+   "approx": true
+  },
+  {
+   "name": "Apple M3 Max",
+   "score": 1.91,
+   "approx": true
+  },
+  {
+   "name": "Apple M4 Max",
+   "score": 2.55,
+   "approx": true
+  }
+ ]
+}

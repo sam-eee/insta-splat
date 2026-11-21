@@ -39,16 +39,18 @@ def stage_seconds(detail: Detail, duration_s: float, lenses: int, hw: Optional[H
     images = frames * lenses
 
     hw_decode = bool(hw and hw.decode and hw.decode.hwaccel)
-    decode = duration_s * lenses * (0.12 if hw_decode else 0.75)      # real-time multiples
+    cpu = (hw.cpu_score if hw else 1.0) or 1.0
+    decode = duration_s * lenses * (0.12 if hw_decode else 0.75 / max(cpu, 0.2))      # real-time multiples; software decode is CPU-bound
     extract = decode + images * 0.08
 
     sfm_q = {"low": 0.6, "medium": 1.0, "high": 1.8}[detail.sfm_quality]
-    sfm = 0.55 * (images ** 1.1) * sfm_q / max(speed, 0.1) ** 0.6
+    sfm = 0.2 * (images ** 1.1) * sfm_q / max(speed, 0.1) ** 0.6
 
-    its_per_s = 14.0 * speed / (1.0 + 0.25 * plan.splats_m)
+    its_per_s = 5.0 * speed / (1.0 + 0.25 * plan.splats_m)
     train = detail.iterations / max(its_per_s, 0.05) * plan.time_factor
 
-    mesh = (45 + plan.splats_m * 25 + (detail.texture_size / 4096) ** 2 * 20) / max(speed, 0.1) ** 0.7
+    mesh = (45 + plan.splats_m * 25 + (detail.texture_size / 4096) ** 2 * 20) * (
+        0.6 / max(speed, 0.1) ** 0.7 + 0.4 / max(cpu, 0.2) ** 0.8)
     return {"extract": extract, "sfm": sfm, "train": train, "mesh": mesh}
 
 
@@ -73,7 +75,8 @@ def estimate(detail: Detail, duration_s: float, lenses: int, hw: Optional[Hardwa
     stages = {s: raw[s] * cal.get(s, 1.0) for s in STAGES}
     total = sum(stages.values())
     calibrated = bool(cal)
-    spread = (0.85, 1.3) if calibrated else (0.7, 1.8)
+    g = hw.best_gpu() if hw else None
+    spread = (0.85, 1.3) if calibrated else (0.7, 1.8) if (g and g.spec_known) else (0.55, 2.4)
     return {"level": detail.level, "stages": stages, "raw_stages": raw, "total_s": total,
             "low_s": total * spread[0], "high_s": total * spread[1], "calibrated": calibrated}
 

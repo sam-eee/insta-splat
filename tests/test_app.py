@@ -136,6 +136,92 @@ class Memory(unittest.TestCase):
         self.assertFalse(memory.looks_like_oom(["step 10/100", "no memory leaks found"]))
 
 
+class Library(unittest.TestCase):
+    def setUp(self):
+        from spherescan import gpudb
+        self.db = gpudb
+        self.t = tempfile.TemporaryDirectory()
+        os.environ["XDG_CONFIG_HOME"] = self.t.name
+        os.environ["APPDATA"] = self.t.name
+        gpudb.reload()
+        self.addCleanup(lambda: (self.t.cleanup(), gpudb.reload()))
+
+    def test_names_from_every_platform_resolve_to_the_right_card(self):
+        for query, want in [
+            ("NVIDIA RTX A500 Laptop GPU", "RTX A500 Laptop"),
+            ("NVIDIA GeForce RTX 4070 Laptop GPU", "GeForce RTX 4070 Laptop"),
+            ("NVIDIA GeForce RTX 4070", "GeForce RTX 4070"),
+            ("NVIDIA GeForce RTX 4070 Ti SUPER", "GeForce RTX 4070 Ti Super"),
+            ("NVIDIA Corporation GA107M [GeForce RTX 3050 Mobile]", "GeForce RTX 3050 Laptop"),
+            ("AMD Radeon RX 7900 XTX", "Radeon RX 7900 XTX"),
+            ("AMD Radeon RX 7900 XT", "Radeon RX 7900 XT"),
+            ("Intel(R) Graphics (MTL)", "Intel Arc Graphics (Meteor Lake)"),
+            ("Apple M2 Pro", "Apple M2 Pro"),
+            ("Apple M2", "Apple M2")]:
+            e = self.db.find_gpu(query)
+            self.assertEqual(e and e["name"], want, query)
+        self.assertIsNone(self.db.find_gpu("Totally Unknown 9000"))
+
+    def test_library_is_well_formed(self):
+        names = [g["name"] for g in self.db.gpus()]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertGreater(len(names), 100)
+        for g in self.db.gpus():
+            self.assertGreater(g["tflops"], 0, g["name"])
+            self.assertGreater(g["bandwidth_gbps"], 0, g["name"])
+            self.assertEqual(g["integrated"], g.get("vram_gb") is None, g["name"])
+        for c in self.db.cpus():
+            self.assertGreater(c["score"], 0)
+
+    def test_faster_cards_score_higher_within_a_family(self):
+        for chain in (["RTX 3060", "RTX 3070", "RTX 3080", "RTX 3090"], ["RTX 4060", "RTX 4070", "RTX 4080", "RTX 4090"],
+                      ["RX 7600", "RX 7800 XT", "RX 7900 XTX"], ["Apple M2", "Apple M2 Pro", "Apple M2 Max"]):
+            speeds = [self.db.gpu_speed(self.db.find_gpu(n)) for n in chain]
+            self.assertEqual(speeds, sorted(speeds), chain)
+        self.assertAlmostEqual(self.db.gpu_speed(self.db.find_gpu("RTX 3060")), 1.0, places=2)
+
+    def test_user_entries_override_and_extend(self):
+        (Path(self.t.name) / "spherescan").mkdir(exist_ok=True)
+        import json
+        from spherescan.util import config_dir
+        (config_dir() / "gpus.json").write_text(json.dumps({"gpus": [
+            {"name": "GeForce RTX 3060", "vendor": "nvidia", "tflops": 25.4, "bandwidth_gbps": 360, "vram_gb": 12, "integrated": False},
+            {"name": "Mystery X1", "vendor": "other", "tflops": 8, "bandwidth_gbps": 200, "vram_gb": 8, "integrated": False}]}))
+        self.db.reload()
+        self.assertEqual(self.db.find_gpu("RTX 3060")["tflops"], 25.4)
+        self.assertEqual(self.db.find_gpu("Mystery X1")["vram_gb"], 8)
+
+    def test_estimates_scale_with_the_card_offline(self):
+        def total(gpu, cpu=None):
+            return estimate.estimate(DETAILS[2], 420, 2, hardware.virtual(gpu, cpu))["total_s"]
+        self.assertLess(total("RTX 4090"), total("RTX 3060"))
+        self.assertLess(total("RTX 3060"), total("RTX A500 Laptop"))
+        self.assertGreater(total("RTX A500 Laptop") / total("RTX 4090"), 4)
+        self.assertLess(total("RTX 4090", "Ryzen 9 7950X"), total("RTX 4090", "Intel Core i7-1165G7"))
+
+    def test_anchored_on_a_real_measured_run(self):
+        # Measured on an RTX A500 Laptop (4 GB): 240 images -> sfm 81 s, level-1 training ~2h20 for 15000 steps.
+        hw = hardware.virtual("RTX A500 Laptop")
+        st = estimate.stage_seconds(DETAILS[1], 120, 2, hw)
+        self.assertAlmostEqual(st["sfm"], 81, delta=45)
+        self.assertAlmostEqual(st["train"], 2 * 3600 + 20 * 60, delta=2400)
+
+    def test_unknown_card_widens_the_range_and_virtual_refuses_it(self):
+        hw = fake_hw(); hw.gpus[0].name = "Unknown"; hw.gpus[0].spec_known = False
+        k = fake_hw(); k.gpus[0].spec_known = True
+        known = estimate.estimate(DETAILS[2], 300, 2, k)
+        guess = estimate.estimate(DETAILS[2], 300, 2, hw)
+        self.assertGreater(guess["high_s"] / guess["low_s"], known["high_s"] / known["low_s"])
+        with self.assertRaises(ValueError):
+            hardware.virtual("Not A Real Card")
+
+    def test_detected_cards_use_the_library(self):
+        g = hardware._classify("NVIDIA RTX A500 Laptop GPU", None, 16.0)
+        self.assertTrue(g.spec_known)
+        self.assertEqual(g.vram_gb, 4)             # the OS could not say; the library can
+        self.assertTrue(hardware._classify("Intel(R) Graphics (MTL)", None, 32.0).integrated)
+
+
 class Progress(unittest.TestCase):
     TRAIN = "step    601/15000 (  4%)  splats 48554  [elapsed 00:03:56.109 | ETA 02:11:54.947]  rgb_loss=0.1231"
     FORECAST = "- Projected peak: 6.23 +/- 1.40 GiB   free for training: 3.62 GiB   chance of running out: 97%."
