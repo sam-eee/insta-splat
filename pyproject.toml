@@ -9,4 +9,4 @@ dependencies = []
 spherescan = "spherescan.__main__:main"
 
 [tool.setuptools.package-data]
-spherescan = ["web/*.html", "data/*.json"]
+spherescan = ["web/*.html", "web/*.js", "data/*.json"]

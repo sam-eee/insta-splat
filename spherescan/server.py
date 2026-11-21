@@ -212,6 +212,21 @@ def make_handler(app: App):
         def _json(self, obj, code: int = 200) -> None:
             self._send(code, json.dumps(obj).encode(), "application/json")
 
+        def _model(self) -> None:
+            """Stream the finished .glb, and only that file, to the page's viewer."""
+            j = app.job
+            f = Path(j.result) if j and j.state == "done" and j.result else None
+            if not f or f.suffix.lower() != ".glb" or not f.is_file():
+                return self._json({"error": "no model to show"}, 404)
+            self.send_response(200)
+            self.send_header("Content-Type", "model/gltf-binary")
+            self.send_header("Content-Length", str(f.stat().st_size))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            with open(f, "rb") as fh:
+                while chunk := fh.read(1 << 20):
+                    self.wfile.write(chunk)
+
         def do_GET(self):
             if not self._ok_host():
                 return self._json({"error": "bad host"}, 403)
@@ -220,6 +235,10 @@ def make_handler(app: App):
                 fmts = json.dumps([{"key": f.key, "label": f.label, "hint": f.hint} for f in FORMATS.values()])
                 html = (WEB / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", app.token).replace("__FORMATS__", fmts)
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
+            if path == "/viewer.js":
+                return self._send(200, (WEB / "viewer.js").read_bytes(), "application/javascript; charset=utf-8")
+            if path == "/api/model" and self.headers.get("X-Token") == app.token:
+                return self._model()
             if path == "/legal":
                 return self._send(200, legal_text().encode(), "text/plain; charset=utf-8")
             if path.startswith("/api/") and self.headers.get("X-Token") == app.token:

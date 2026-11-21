@@ -105,11 +105,21 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <p id="perr" class="bad"></p>
     <details><summary>Technical details</summary><pre id="log"></pre></details>
   </section>
+  <section class="card hidden" id="view">
+    <h2>Your 3D model</h2>
+    <div style="position:relative">
+      <canvas id="cv" style="width:100%;height:min(60vh,460px);border-radius:12px;display:block;background:#171a1f"></canvas>
+      <div id="vstat" class="small" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#cfd5df;text-align:center;padding:16px;pointer-events:none"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button id="vreset">Reset view</button><button id="vflip">Flip upside-down</button></div>
+    <p class="help" style="margin:8px 0 0">Drag to turn. Scroll or pinch to zoom. Right-drag or Shift-drag to move. If it looks upside-down, press Flip.</p>
+  </section>
   <footer class="help" style="text-align:center;margin-top:24px">
     Free software (GPLv3): SphereScan and the bundled <a href="https://github.com/harry7557558/spirula-studio" target="_blank" rel="noopener">Spirula Studio</a>.
     <a href="/legal" target="_blank">Licences and source code</a>
   </footer>
 </main>
+<script src="/viewer.js"></script>
 <script>
 const TOKEN="__TOKEN__";
 const $=id=>document.getElementById(id);
@@ -179,13 +189,32 @@ $("outbtn").onclick=async()=>{const r=await api("pick",{kind:"folder"});if(r.pat
 $("go").onclick=async()=>{
   const r=await api("start",{ids:[...sel],level:+$("lod").value,format:$("fmt").value,out_dir:outDir});
   if(r.error){$("gowhy").textContent=r.error;return}
-  busy=true;$("prog").classList.remove("hidden");$("cancel").classList.remove("hidden");
+  closeViewer();busy=true;$("prog").classList.remove("hidden");$("cancel").classList.remove("hidden");
   ["openfile","openfolder"].forEach(i=>$(i).classList.add("hidden"));$("perr").textContent="";
   refreshGo();$("prog").scrollIntoView({behavior:"smooth"});poll();
 };
 $("cancel").onclick=()=>api("cancel",{});
 $("openfile").onclick=()=>api("reveal",{what:"file"});
 $("openfolder").onclick=()=>api("reveal",{what:"folder"});
+let viewer=null,viewerFor=null;
+function closeViewer(){if(viewer){viewer.dispose();viewer=null}viewerFor=null;$("view").classList.add("hidden")}
+async function showViewer(path){
+  if(viewerFor===path)return;viewerFor=path;$("view").classList.remove("hidden");
+  const say=t=>{$("vstat").textContent=t};
+  if(!/\.glb$/i.test(path)){say("The built-in viewer shows .glb files. Open this file in your 3D viewer with the button above.");return}
+  if(typeof SphereViewer==="undefined"){say("Your model is saved. Close and reopen SphereScan to preview it here.");return}
+  try{
+    say("Loading your model…");
+    if(viewer){viewer.dispose()}
+    viewer=new SphereViewer($("cv"));
+    const r=await fetch("/api/model",{headers:{"X-Token":TOKEN}});
+    if(!r.ok)throw new Error("The model could not be loaded.");
+    const info=await viewer.load(await r.arrayBuffer(),say);
+    say("");
+  }catch(e){say(String(e.message||e))}
+}
+$("vreset").onclick=()=>viewer&&viewer.resetView();
+$("vflip").onclick=()=>viewer&&viewer.toggleFlip();
 const STAGES=[["extract","Reading video"],["sfm","Camera positions"],["train","3D model"],["mesh","Mesh"]];
 async function poll(){
   const s=await api("status");
@@ -200,6 +229,7 @@ async function poll(){
   if(s.state==="running"){setTimeout(poll,1500);return}
   busy=false;refreshGo();$("cancel").classList.add("hidden");
   if(s.state==="done")$("eta").textContent="";
+  if(s.state==="done")showViewer(s.result);
   if(s.state==="done"){$("openfile").classList.remove("hidden");$("openfolder").classList.remove("hidden");$("pmeta").textContent="Saved to "+s.result}
   if(s.state==="failed")$("perr").textContent=s.message;
   if(s.detail_note)$("pmeta").textContent+="  "+s.detail_note;

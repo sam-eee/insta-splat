@@ -33,6 +33,10 @@ Command line: `spherescan run FOLDER -o OUT --detail 3`, `spherescan estimate FO
 `python build.py` makes the one-file app with PyInstaller (`pip install pyinstaller` first). Put Spirula under `vendor/` beforehand to bundle it; the GitHub workflow `release.yml` does that for Windows, macOS and Linux (it fetches the release named in `SPIRULA_VERSION`) and attaches the files to a release when you push a `v*` tag. PyInstaller cannot cross-compile, so each system is built on its own runner.
 Running from source: `python -m spherescan` with a Spirula build in `vendor/` or `SPHERESCAN_SPIRULA` set.
 
+## Built-in 3D viewer
+
+When a run finishes, the model appears on the same page: drag to turn, scroll or pinch to zoom, right-drag to move, **Flip upside-down** if the capture came out inverted. It is a small built-in WebGL2 viewer with no downloads or internet needed, for `.glb` (the default) with textures or vertex colours. Other formats (OBJ, glTF, PLY, STL) are saved as usual and open in your own 3D viewer. Files using Draco or meshopt compression, or a browser or graphics driver without WebGL2, fall back to a message. Large meshes (millions of triangles) need a reasonable graphics card to turn smoothly.
+
 ## Time estimates on any card (offline)
 
 SphereScan ships a library of about 130 graphics cards and 45 CPUs (`spherescan/data/*.json`) with approximate public specs: FP32 TFLOPS, memory bandwidth, memory size. Relative speed is `(TFLOPS/12.7)^0.6 x (GB/s / 360)^0.4`, where an RTX 3060 = 1.0. It is anchored on one real measured run (RTX A500 Laptop: 240 images, structure-from-motion 81 s, level-1 training about 2 h 20 min), and every finished run on a machine corrects that machine's estimates further. Cards not in the library get a rougher guess and a wider range.
