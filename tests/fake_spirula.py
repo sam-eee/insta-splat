@@ -54,10 +54,24 @@ elif a[:2] == ["train", "meshing"]:
     run = Path(opt("--output-dir-prefix")) / opt("--output-dir-name")
     run.mkdir(parents=True)
     (run / "config.json").write_text(json.dumps({"quality": opt("--quality"), "cap_max": opt("--cap-max")}))
+    lim = os.environ.get("FAKE_FORECAST_ABOVE")
+    if lim and int(opt("--cap-max")) > int(lim):
+        print("Warning: training may run out of GPU memory.")
+        print("- Projected peak: 6.23 +/- 1.40 GiB   free for training: 3.62 GiB   chance of running out: 97%.", flush=True)
+        import time
+        time.sleep(5)                       # the app should stop us long before this ends
+        print("fake spirula: was not stopped", file=sys.stderr)
+        sys.exit(9)
     for i in (1, 5, 10):
-        print(f"step {i * 1000}/10000")
+        print(f"step {i * 1000:>6}/10000 ({i * 10:>3}%)  splats 46242  [elapsed 00:00:01 | ETA 00:00:0{10 - i}]", flush=True)
 elif a[:1] == ["mesh"]:
     need("--format", "--color", "--output", "--texture-size")
+    if opt("--progress-dir"):
+        import json as _j
+        Path(opt("--progress-dir")).mkdir(parents=True, exist_ok=True)
+        (Path(opt("--progress-dir")) / "memory.json").write_text(_j.dumps({"phase": "mesh", "work": 0.5}))
+        import time
+        time.sleep(1.6)                     # long enough for the app to read it
     fmt = opt("--format").split("+")[0]
     Path(opt("--output") + "." + fmt).write_bytes(b"glTF")
     print("mesh written")

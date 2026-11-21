@@ -14,12 +14,14 @@ from typing import Callable, Optional
 
 from . import estimate as est
 from . import memory, recipe
+from .progress import StageParser, eta_seconds, human_left, mapping_time_fraction, read_mesh_progress
 from .footage import Capture, jpeg_size
 from .hardware import Hardware, device_env
 from .presets import DETAILS, FORMATS
 from .util import IS_WINDOWS, engine_env, find_executable, popen_flags
 
 WORK_MARKER = ".spherescan-work"
+_ABORTED = -999
 
 
 class Cancelled(Exception):
@@ -53,6 +55,10 @@ class Job:
     log: list = field(default_factory=list)
     commands: list = field(default_factory=list)
     detail_note: str = ""
+    eta_s: Optional[float] = None
+    _own_eta: Optional[float] = None
+    _stage_t0: float = 0.0
+    _predicted: dict = field(default_factory=dict)
     started: float = 0.0
     _proc: Optional[subprocess.Popen] = None
     _cancel: bool = False
@@ -74,7 +80,7 @@ class Job:
         with self._lock:
             return {"state": self.state, "stage": self.stage, "stage_label": est.STAGE_LABEL.get(self.stage, ""),
                     "stage_progress": self.stage_progress, "overall": self.overall, "message": self.message,
-                    "result": self.result, "detail_note": self.detail_note, "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
+                    "result": self.result, "detail_note": self.detail_note, "eta_s": self.eta_s, "eta_text": human_left(self.eta_s), "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
                     "commands": self.commands if self.dry_run else []}
 
     # ---- internals ------------------------------------------------------
@@ -107,8 +113,11 @@ class Job:
             weights = est.estimate(detail, duration, lenses, self.hw)["stages"]
             total_w = sum(weights.values()) or 1.0
 
+            self._predicted = dict(weights)
+
             def stage(s: str):
                 self.stage, self.stage_progress = s, 0.0
+                self._own_eta, self._stage_t0 = None, time.time()
                 done = sum(weights[x] for x in est.STAGES[:est.STAGES.index(s)])
                 self._base = (done / total_w, weights[s] / total_w, weights[s])
 
@@ -130,7 +139,9 @@ class Job:
             t0 = time.time(); stage("mesh")
             run_dir = _find_run_dir(work / "train") if not self.dry_run else work / "train" / "run"
             out_base = out_dir / name
-            self._run(recipe.mesh_cmd(spirula, str(run_dir), str(work), str(out_base), detail, fmt))
+            self._run(recipe.mesh_cmd(spirula, str(run_dir), str(work), str(out_base), detail, fmt,
+                                      progress_dir=str(work / "progress_mesh")),
+                      progress_dir=work / "progress_mesh")
             actual["mesh"] = time.time() - t0
 
             result = _find_result(out_dir, name, fmt.extension) if not self.dry_run else out_base.with_suffix(fmt.extension)
@@ -141,7 +152,7 @@ class Job:
                 if not self.keep_work:
                     _remove_work(work)
             with self._lock:
-                self.result, self.state, self.overall, self.stage_progress = str(result), "done", 1.0, 1.0
+                self.result, self.state, self.overall, self.stage_progress, self.eta_s = str(result), "done", 1.0, 1.0, 0.0
         except Cancelled:
             self.state, self.message = "cancelled", "Cancelled."
         except StageError as e:
@@ -149,22 +160,32 @@ class Job:
         except Exception as e:      # never leave the GUI waiting on a dead thread
             self.state, self.message = "failed", f"Unexpected error: {e}"
 
-    # ---- train, shrinking the model if the card runs out of memory ---------
+    # ---- train, shrinking the model until it fits ---------------------------
     def _train(self, spirula: str, work: Path, detail, mplan) -> None:
         step = mplan.step
+
+        def doomed(parser) -> bool:
+            f = parser.forecast
+            return bool(f and f.chance_oom >= 50 and step < memory.MAX_STEP)
+
         while True:
             p = memory.plan_at(detail, self.hw, step)
             shutil.rmtree(work / "train", ignore_errors=True)
             mark = len(self.log)
-            rc = self._run(recipe.train_cmd(spirula, str(work), str(work / "train"), detail, p), check=False)
+            rc = self._run(recipe.train_cmd(spirula, str(work), str(work / "train"), detail, p),
+                           check=False, abort_if=doomed)
             if rc == 0:
                 if step != mplan.step:
                     self.detail_note = p.note()
+                if step > 0:
+                    memory.remember(self.hw, detail, step)
                 return
-            if memory.looks_like_oom(self.log[mark:]) and step < memory.MAX_STEP:
+            if (rc == _ABORTED or memory.looks_like_oom(self.log[mark:])) and step < memory.MAX_STEP:
                 step += 1
-                self._say(f"Out of graphics memory. Retrying with less detail (step {step}).")
-                self.stage_progress = 0.0
+                why = "Spirula expects to run out of graphics memory" if rc == _ABORTED else "Out of graphics memory"
+                self._say(f"{why}. Starting again with less detail (step {step}).")
+                self.stage_progress, self._own_eta, self._stage_t0 = 0.0, None, time.time()
+                self.detail_note = memory.plan_at(detail, self.hw, step).note()
                 continue
             tail = " | ".join(self.log[-4:])
             raise StageError(f"'{est.STAGE_LABEL['train']}' failed (exit code {rc}). {tail}")
@@ -232,10 +253,32 @@ class Job:
 
     def _publish(self) -> None:
         base, span, _ = getattr(self, "_base", (0, 0, 0))
+        f = min(self.stage_progress, 1.0)
+        eta = None
+        if self._predicted and self.stage in self._predicted and self.started:
+            eta = eta_seconds(list(est.STAGES), self._predicted, self.stage, f, time.time() - self.started,
+                              time.time() - self._stage_t0, self._own_eta)
         with self._lock:
-            self.overall = min(0.99, base + span * min(self.stage_progress, 1.0))
+            self.overall = min(0.99, base + span * f)
+            self.eta_s = eta
 
-    def _run(self, cmd: list, check: bool = True) -> int:
+    def _advance(self, parser: StageParser, t0: float, mesh_dir: Optional[Path]) -> None:
+        """Move the bar to what Spirula has actually reported; estimate only where it reports nothing."""
+        f, expected = parser.fraction, max(self._base[2], 1.0)
+        if self.stage == "mesh" and mesh_dir:
+            w = read_mesh_progress(mesh_dir)
+            if w is not None:
+                f = max(f, w)
+            else:
+                f = max(f, 0.9 * (time.time() - t0) / (time.time() - t0 + expected))   # no signal yet: slow, never a jump
+        elif self.stage == "sfm" and parser.mapping:
+            f = max(f, mapping_time_fraction(0, time.time() - self._map_t0, expected))
+        if self.stage == "train":
+            self._own_eta = parser.own_eta
+        self.stage_progress = min(0.99, max(self.stage_progress, f))
+        self._publish()
+
+    def _run(self, cmd: list, check: bool = True, abort_if=None, progress_dir: Optional[Path] = None) -> int:
         self._check()
         self._say("$ " + " ".join(_q(c) for c in cmd))
         self.commands.append(cmd)
@@ -243,30 +286,44 @@ class Job:
             return 0
         env = {**os.environ, **device_env(self.hw), **engine_env()}
         t0 = time.time()
-        expected = self._base[2]
+        self._map_t0 = t0
         try:
             self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                           text=True, errors="replace", env=env, **popen_flags())
         except OSError as e:
             raise StageError(f"Could not start Spirula: {e}")
-        parsed = 0.0
+        parser = StageParser(self.stage)
+        stop = threading.Event()
+        if progress_dir is not None:                       # mesh reports through a file, not its output
+            def poll():
+                while not stop.wait(1.0):
+                    self._advance(parser, t0, progress_dir)
+            threading.Thread(target=poll, daemon=True).start()
+        was_mapping, aborted = False, False
         for line in self._proc.stdout:                       # type: ignore[union-attr]
             line = line.rstrip()
-            if line:
-                self._say(line)
-            m = re.search(r"(\d+(?:\.\d+)?)\s*%", line)
-            n = re.search(r"\b(\d+)\s*/\s*(\d+)\b", line)
-            if m and 0 <= float(m[1]) <= 100:
-                parsed = max(parsed, float(m[1]) / 100)
-            elif n and 0 < int(n[2]) and int(n[1]) <= int(n[2]):
-                parsed = max(parsed, int(n[1]) / int(n[2]))
-            timed = min(0.9, (time.time() - t0) / max(expected, 1.0))
+            if not line:
+                continue
+            self._say(line)
+            parser.feed(line)
+            if parser.mapping and not was_mapping:
+                was_mapping, self._map_t0 = True, time.time()
             if self.stage != "extract":
-                self.stage_progress = min(0.98, max(parsed, timed))
-                self._publish()
+                self._advance(parser, t0, progress_dir)
+            if abort_if and abort_if(parser):
+                aborted = True
+                _kill_tree(self._proc)
+                break
+        stop.set()
         self._proc.stdout.close()                            # type: ignore[union-attr]
         rc = self._proc.wait()
+        if aborted:
+            return _ABORTED
         self._check()
+        if rc == 0:
+            parser.finish()
+            self.stage_progress = 1.0
+            self._publish()
         if rc != 0:
             lib = next((l for l in self.log[-20:] if "error while loading shared libraries" in l), None)
             if lib:

@@ -21,6 +21,24 @@ def fake_hw(vram=12.0, hwaccel=None):
                              hardware.DecodePlan("/usr/bin/ffmpeg" if hwaccel else None, hwaccel, True, "test"), vram)
 
 
+class OneRecording(unittest.TestCase):
+    def test_server_refuses_more_than_one(self):
+        from spherescan.server import App
+        app = App.__new__(App)
+        app.hw = fake_hw()
+        app._hw_ready = __import__("threading").Event(); app._hw_ready.set()
+        app.job = None
+        with tempfile.TemporaryDirectory() as t:
+            mp4(Path(t) / "GS010001.360", 10); mp4(Path(t) / "GS010002.360", 10)
+            caps = footage.scan_folder(t)
+            self.assertEqual(len(caps), 2)
+            app.captures = {c.id: c for c in caps}
+            ids = list(app.captures)
+            self.assertIn("error", app.estimate(ids))
+            self.assertIn("error", app.start({"ids": ids, "level": 1, "format": "glb", "out_dir": t}))
+            self.assertEqual(len(app.estimate(ids[:1])["levels"]), 4)
+
+
 class Scan(unittest.TestCase):
     def test_insv_pairs_chapters_and_lrv(self):
         with tempfile.TemporaryDirectory() as t:
@@ -57,7 +75,7 @@ class Estimates(unittest.TestCase):
         self.assertEqual(totals, sorted(totals))
         self.assertTrue(all(x["available"] for x in lv))
         self.assertEqual([x["reduced"] for x in lv], [False, False, True, True])
-        self.assertIn("graphics memory", lv[3]["memory_note"])
+        self.assertIn("graphics card", lv[3]["memory_note"])
 
     def test_card_too_small_is_refused(self):
         self.assertFalse(estimate.available(DETAILS[1], fake_hw(vram=1.0))[0])
@@ -116,6 +134,57 @@ class Memory(unittest.TestCase):
     def test_oom_detection(self):
         self.assertTrue(memory.looks_like_oom(["x", "VK_ERROR_OUT_OF_DEVICE_MEMORY"]))
         self.assertFalse(memory.looks_like_oom(["step 10/100", "no memory leaks found"]))
+
+
+class Progress(unittest.TestCase):
+    TRAIN = "step    601/15000 (  4%)  splats 48554  [elapsed 00:03:56.109 | ETA 02:11:54.947]  rgb_loss=0.1231"
+    FORECAST = "- Projected peak: 6.23 +/- 1.40 GiB   free for training: 3.62 GiB   chance of running out: 97%."
+
+    def test_a_memory_warning_is_not_progress(self):
+        from spherescan.progress import StageParser
+        p = StageParser("train")
+        p.feed(self.FORECAST)
+        self.assertEqual(p.fraction, 0.0)
+        self.assertEqual((p.forecast.chance_oom, p.forecast.free_gib), (97, 3.62))
+
+    def test_train_step_lines_give_fraction_and_spirulas_eta(self):
+        from spherescan.progress import StageParser
+        p = StageParser("train")
+        p.feed(self.TRAIN)
+        self.assertAlmostEqual(p.fraction, 601 / 15000)
+        self.assertEqual(p.own_eta, 2 * 3600 + 11 * 60 + 54)
+
+    def test_sfm_lines_and_other_stages_ignore_stray_percentages(self):
+        from spherescan.progress import StageParser
+        s = StageParser("sfm")
+        s.feed("RESULT-less line says 100% of the images")        # no exact format: ignored
+        self.assertEqual(s.fraction, 0.0)
+        s.feed("  120/240   frame_0001.jpg   Features: 8123")
+        self.assertAlmostEqual(s.fraction, 0.15)
+        s.feed("10500/21000 pairs matched")
+        self.assertAlmostEqual(s.fraction, 0.45)
+        s.feed("21000/21000 pairs matched")
+        self.assertTrue(s.mapping)
+        s.feed("[run]     Mapping: 00:01:08   Registered: 240/240 images   Points: 46242   Cameras: 2")
+        self.assertEqual(s.fraction, 1.0)
+
+    def test_eta_uses_spirulas_own_estimate_and_scales_later_stages(self):
+        from spherescan.progress import eta_seconds
+        order = ["extract", "sfm", "train", "mesh"]
+        pred = {"extract": 60, "sfm": 300, "train": 1000, "mesh": 200}
+        # train 10% in; machine is running 2x slower than predicted so far
+        e = eta_seconds(order, pred, "train", 0.1, elapsed_total=2 * (60 + 300 + 100), stage_elapsed=200, own_eta=1800)
+        self.assertAlmostEqual(e, 1800 + 200 * 2, delta=1)
+        self.assertEqual(eta_seconds(order, pred, "mesh", 1.0, 1500, 10), 0.0)
+
+    def test_mesh_progress_file(self):
+        from spherescan.progress import read_mesh_progress
+        with tempfile.TemporaryDirectory() as t:
+            self.assertIsNone(read_mesh_progress(Path(t)))
+            (Path(t) / "memory.json").write_text('{"phase": "x", "work": 0.42}')
+            self.assertEqual(read_mesh_progress(Path(t)), 0.42)
+            (Path(t) / "memory.json").write_text('{"work": -1}')
+            self.assertIsNone(read_mesh_progress(Path(t)))
 
 
 class Packaging(unittest.TestCase):
@@ -322,7 +391,7 @@ class Pipeline(unittest.TestCase):
         self.assertGreater(len(caps), 1)
         self.assertEqual(caps, sorted(caps, reverse=True))
         self.assertLessEqual(caps[-1], 180000)
-        self.assertIn("graphics memory", job.snapshot()["detail_note"])
+        self.assertIn("graphics card", job.snapshot()["detail_note"])
 
     def test_real_failure_is_not_retried_forever(self):
         src = self.d / "in"
@@ -332,6 +401,43 @@ class Pipeline(unittest.TestCase):
         job = self.run_job(footage.scan_folder(str(src)))
         self.assertEqual(job.state, "failed")
         self.assertEqual(len([c for c in job.commands if c[1] == "train"]), memory.MAX_STEP + 1)
+
+    def test_spirulas_memory_forecast_triggers_an_early_restart_with_less(self):
+        src = self.d / "in"
+        mp4(src / "IMG_x.insv", 30)
+        os.environ["FAKE_FORECAST_ABOVE"] = "180000"
+        self.addCleanup(os.environ.pop, "FAKE_FORECAST_ABOVE", None)
+        job = self.run_job(footage.scan_folder(str(src)), keep_work=True)
+        self.assertEqual(job.state, "done", job.message)
+        trains = [c for c in job.commands if c[1] == "train"]
+        self.assertGreater(len(trains), 1)
+        self.assertLessEqual(int(trains[-1][trains[-1].index("--cap-max") + 1]), 180000)
+        self.assertTrue(any("expects to run out" in l for l in job.log))
+        self.assertEqual(memory.learned_step(DETAILS[1], fake_hw()) > 0, True)   # remembered for next time
+
+    def test_progress_comes_from_spirula_and_an_eta_is_given(self):
+        src = self.d / "in"
+        mp4(src / "IMG_x.insv", 30)
+        job = Job(captures=footage.scan_folder(str(src)), detail_level=1, format_key="glb",
+                  out_dir=str(self.d / "out"), hw=fake_hw())
+        seen = []
+        orig = job._publish
+        def spy():
+            orig()
+            seen.append((job.stage, round(job.stage_progress, 2), job.eta_s))
+        job._publish = spy
+        job.start()
+        for _ in range(300):
+            if job.state != "running":
+                break
+            time.sleep(0.1)
+        self.assertEqual(job.state, "done", job.message)
+        train = [p for st, p, _ in seen if st == "train"]
+        self.assertTrue(any(0.05 < p < 0.95 for p in train), train)      # real steps, not a jump to 90%
+        self.assertEqual(train, sorted(train))
+        self.assertTrue(any(e is not None for _, _, e in seen))
+        mesh = [p for st, p, _ in seen if st == "mesh"]
+        self.assertTrue(any(abs(p - 0.5) < 0.01 for p in mesh), mesh)    # read from Spirula's progress file
 
     def test_dry_run_prints_commands_and_runs_nothing(self):
         src = self.d / "in"

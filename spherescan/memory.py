@@ -21,6 +21,7 @@ from typing import Optional
 
 from .hardware import Hardware
 from .presets import Detail
+from .util import config_dir, load_json, save_json
 
 MAX_STEP = 8
 MIN_SPLATS_M = 0.15
@@ -71,13 +72,7 @@ class MemoryPlan:
     def note(self) -> str:
         if not self.reduced:
             return ""
-        bits = [f"about {self.kept * 100:.0f}% of this level's usual detail points"]
-        if self.max_resolution:
-            bits.append(f"training pictures limited to {self.max_resolution} px")
-        if self.progressive:
-            bits.append("starting coarse and sharpening")
-        tail = "" if self.fits else " It may still run out of memory; the app will retry with less automatically."
-        return "To fit your graphics memory this uses " + ", ".join(bits) + "." + tail
+        return "Adjusted to fit your graphics card, with a little less fine detail."
 
 
 def need_gb(splats_m: float, max_res: int) -> float:
@@ -100,9 +95,28 @@ def plan_at(detail: Detail, hw: Optional[Hardware], step: int) -> MemoryPlan:
                       round(budget, 1), splats / detail.splats, need <= budget)
 
 
+_LEARNED = "memory_steps.json"
+
+
+def _gpu_key(hw: Optional[Hardware]) -> str:
+    g = hw.best_gpu() if hw else None
+    return f"{g.name}|{g.vram_gb}" if g else "unknown"
+
+
+def learned_step(detail: Detail, hw: Optional[Hardware]) -> int:
+    """The step that really worked on this GPU before. Spirula's own forecast beats our model."""
+    return int(load_json(config_dir() / _LEARNED, {}).get(_gpu_key(hw), {}).get(str(detail.level), 0))
+
+
+def remember(hw: Optional[Hardware], detail: Detail, step: int) -> None:
+    data = load_json(config_dir() / _LEARNED, {})
+    data.setdefault(_gpu_key(hw), {})[str(detail.level)] = step
+    save_json(config_dir() / _LEARNED, data)
+
+
 def plan(detail: Detail, hw: Optional[Hardware]) -> MemoryPlan:
     """The gentlest step that is expected to fit, or the smallest one if none does."""
-    for s in range(MAX_STEP + 1):
+    for s in range(learned_step(detail, hw), MAX_STEP + 1):
         p = plan_at(detail, hw, s)
         if p.fits:
             return p

@@ -68,7 +68,10 @@ def train_cmd(spirula: str, workspace: str, train_dir: str, detail: Detail, plan
 
 
 def mesh_cmd(spirula: str, run_dir: str, workspace: str, out_base: str,
-             detail: Detail, fmt: MeshFormat) -> list:
-    return [spirula, "mesh", run_dir, "--data", workspace, "--output", out_base,
-            "--format", fmt.spirula_format, "--color", fmt.color,
-            "--texture-size", str(detail.texture_size)]
+             detail: Detail, fmt: MeshFormat, progress_dir: Optional[str] = None) -> list:
+    cmd = [spirula, "mesh", run_dir, "--data", workspace, "--output", out_base,
+           "--format", fmt.spirula_format, "--color", fmt.color,
+           "--texture-size", str(detail.texture_size)]
+    if progress_dir:
+        cmd += ["--progress-dir", progress_dir]      # Spirula writes its real work fraction here
+    return cmd

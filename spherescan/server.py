@@ -55,7 +55,7 @@ class App:
         if not spirula:
             problems.append("Spirula Studio is not installed next to this app (see README).")
         return {"ready": True, "summary": " · ".join(parts),
-                "decode": hw.decode.reason if hw.decode else "", "notes": hw.notes,
+                "decode": hw.decode.reason if hw.decode and hw.decode.hwaccel else "", "notes": hw.notes,
                 "problems": problems, "details": hw.to_dict()}
 
     def scan(self, folder: str) -> dict:
@@ -75,9 +75,8 @@ class App:
         caps = self._selected(ids)
         if not caps:
             return {"levels": []}
-        kinds = {c.kind for c in caps}
-        if len(kinds) > 1:
-            return {"levels": [], "error": "Pick recordings from one camera type at a time."}
+        if len(caps) > 1:
+            return {"levels": [], "error": "Choose one recording at a time."}
         dur = sum(c.duration_s for c in caps)
         lenses = 10 if caps[0].kind == "gopro" else 2
         self._hw_ready.wait(60)
@@ -92,8 +91,8 @@ class App:
         fmt = body.get("format", DEFAULT_FORMAT)
         if not caps or level not in DETAILS or fmt not in FORMATS:
             return {"error": "Choose at least one recording first."}
-        if len({c.kind for c in caps}) > 1:
-            return {"error": "Pick recordings from one camera type at a time."}
+        if len(caps) != 1:
+            return {"error": "Choose one recording."}
         ok, why = est.available(DETAILS[level], self.hw)
         if not ok:
             return {"error": why}

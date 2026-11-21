@@ -60,13 +60,12 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
 <body>
 <main>
   <h1>SphereScan</h1>
-  <p class="sub">Turn 360° footage into a 3D model. Three choices, then press Go.</p>
   <div id="hw"><span class="chip">Checking your computer…</span></div>
   <div id="problems"></div>
 
   <section class="card" id="s1">
     <h2><span class="num">1</span> Choose your footage folder</h2>
-    <p class="help">Pick the folder with your Insta360 (.insv), GoPro MAX (.360) or DJI (.osv) files. Matching lens files are joined for you.</p>
+    <p class="help">Pick the folder with your Insta360 (.insv), GoPro MAX (.360) or DJI (.osv) files, then choose one recording. Matching lens files are joined for you.</p>
     <div class="row"><button class="primary" id="pick">Choose folder…</button><span class="path" id="folder">No folder chosen</span></div>
     <details style="margin-top:8px"><summary>Or type the folder location</summary>
       <div class="row" style="margin-top:8px"><input type="text" id="typed" placeholder="C:\Users\you\Videos\Trip" aria-label="Folder location"><button id="typedgo">Use</button></div></details>
@@ -75,10 +74,10 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
 
   <section class="card" id="s2">
     <h2><span class="num">2</span> Pick the detail level</h2>
-    <p class="help">More detail looks better and takes longer. Times are estimated for this computer and the footage you ticked. On a graphics card with less memory, high levels still run with a little less fine detail (marked ⚠).</p>
+    <p class="help">More detail looks better and takes longer. Times are estimates for this computer.</p>
     <input type="range" id="lod" min="1" max="4" step="1" value="2" aria-label="Detail level">
     <div class="ticks"><span>1 Quick</span><span>2 Standard</span><span>3 High</span><span>4 Maximum</span></div>
-    <div class="est" id="est"><span class="small">Tick a recording above to see the time estimate.</span></div>
+    <div class="est" id="est"><span class="small">Choose a recording above to see the time estimate.</span></div>
     <table id="tbl"></table>
   </section>
 
@@ -97,6 +96,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <div class="steps" id="steps"></div>
     <div class="bar"><i id="barfill"></i></div>
     <div class="meta" id="pmeta"></div>
+    <div class="meta" id="eta"></div>
     <div class="row" style="margin-top:10px">
       <button id="cancel">Cancel</button>
       <button class="primary hidden" id="openfile">Show my 3D model</button>
@@ -125,7 +125,7 @@ $("fmt").onchange=showHint;showHint();
 setInterval(()=>api("ping").catch(()=>{}),4000);api("ping");
 api("hardware").then(h=>{
   if(!h.ready){$("hw").innerHTML='<span class="chip">Could not read hardware</span>';return}
-  $("hw").innerHTML=`<span class="chip">${esc(h.summary)}</span><span class="chip">${esc(h.decode)}</span>`+h.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("");
+  $("hw").innerHTML=`<span class="chip">${esc(h.summary)}</span>${h.decode?`<span class="chip">${esc(h.decode)}</span>`:""}`+h.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("");
   hwProblems=h.problems;$("problems").innerHTML=h.problems.map(p=>`<div class="card bad">${esc(p)}</div>`).join("");
   refreshGo();
 });
@@ -142,15 +142,12 @@ async function scan(folder){
   drawRecs();update();
 }
 function drawRecs(){
-  const kind=[...sel].length?caps.find(c=>c.id===[...sel][0]).kind:null;
   $("recs").innerHTML=caps.map(c=>{
-    const dis=kind&&c.kind!==kind;
     const badges=(c.paired?'<span class="badge ok">✓ both lenses matched</span>':'')+(c.lens_files[0].length>1?`<span class="badge">${c.lens_files[0].length} parts joined</span>`:'');
-    return `<label class="rec ${sel.has(c.id)?"on":""} ${dis?"off":""}"><input type="checkbox" data-id="${esc(c.id)}" ${sel.has(c.id)?"checked":""} ${dis?"disabled":""}>
+    return `<label class="rec ${sel.has(c.id)?"on":""}"><input type="radio" name="rec" data-id="${esc(c.id)}" ${sel.has(c.id)?"checked":""}>
       <span><b>${esc(c.label)}${badges}</b><span class="meta">${dur(c.duration_s)}${c.duration_exact?"":" (approx.)"} · ${c.size_gb.toFixed(1)} GB</span>
-      ${c.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("")}</span></label>`}).join("")+
-    (kind?'<p class="help">Different camera types cannot be combined in one model, so they are greyed out.</p>':"");
-  document.querySelectorAll("#recs input").forEach(i=>i.onchange=()=>{i.checked?sel.add(i.dataset.id):sel.delete(i.dataset.id);drawRecs();update()});
+      ${c.notes.map(n=>`<div class="warn">${esc(n)}</div>`).join("")}</span></label>`}).join("");
+  document.querySelectorAll("#recs input").forEach(i=>i.onchange=()=>{sel=new Set([i.dataset.id]);drawRecs();update()});
 }
 async function update(){
   if(!sel.size){levels=[];draw();return}
@@ -159,13 +156,13 @@ async function update(){
 }
 function draw(approx){
   const L=+$("lod").value;
-  if(!levels.length){$("est").innerHTML='<span class="small">Tick a recording above to see the time estimate.</span>';$("tbl").innerHTML="";refreshGo();return}
+  if(!levels.length){$("est").innerHTML='<span class="small">Choose a recording above to see the time estimate.</span>';$("tbl").innerHTML="";refreshGo();return}
   const l=levels[L-1];
   $("est").innerHTML=`<div class="small">Level ${L}: ${esc(l.name)}</div><div class="big">${esc(l.text)}</div>
     <div class="small">${esc(l.blurb)}${l.available?"":` <b class="warn">Not available: ${esc(l.why)}</b>`}</div>
-    ${l.memory_note?`<div class="warn" style="margin-top:6px">${esc(l.memory_note)}</div>`:""}
+    ${l.memory_note?`<div class="small" style="margin-top:6px">${esc(l.memory_note)}</div>`:""}
     <div class="small" style="margin-top:6px"><b>Total estimate: ${esc(l.total_text)}</b> from video to mesh${approx?" (video length is approximate)":""}</div>`;
-  $("tbl").innerHTML=levels.map((x,i)=>`<tr class="${i+1===L?"sel":""} ${x.available?"":"dis"}"><td>${i+1}</td><td>${esc(x.name)}</td><td>${x.frames} camera positions${x.reduced?` · ${x.kept_pct}% detail points`:""}</td><td style="text-align:right">${esc(x.text)}${x.available?(x.reduced?" ⚠":""):" ✕"}</td></tr>`).join("");
+  $("tbl").innerHTML=levels.map((x,i)=>`<tr class="${i+1===L?"sel":""} ${x.available?"":"dis"}"><td>${i+1}</td><td>${esc(x.name)}</td><td style="text-align:right">${esc(x.text)}${x.available?"":" ✕"}</td></tr>`).join("");
   refreshGo();
 }
 function refreshGo(){
@@ -193,14 +190,16 @@ const STAGES=[["extract","Reading video"],["sfm","Camera positions"],["train","3
 async function poll(){
   const s=await api("status");
   const idx=STAGES.findIndex(x=>x[0]===s.stage);
-  $("steps").innerHTML=STAGES.map((x,i)=>`<span class="${s.state==="done"||i<idx?"done":i===idx?"on":""}">${s.state==="done"||i<idx?"✓ ":""}${x[1]}</span>`).join("");
+  $("steps").innerHTML=STAGES.map((x,i)=>`<span class="${s.state==="done"||i<idx?"done":i===idx?"on":""}">${s.state==="done"||i<idx?"✓ ":""}${x[1]}${i===idx&&s.state==="running"?" "+Math.round(s.stage_progress*100)+"%":""}</span>`).join("");
   $("barfill").style.width=(s.overall*100).toFixed(1)+"%";
   $("log").textContent=(s.log||[]).join("\n");
   const m=Math.round((s.elapsed||0)/60);
-  $("pmeta").textContent=`${Math.round(s.overall*100)}% · ${s.stage_label||""} · ${m} min elapsed`;
+  $("pmeta").textContent=`${Math.round(s.overall*100)}% overall · ${m} min elapsed`;
+  $("eta").textContent=(s.state==="running"&&s.eta_text)?`Time left: ${s.eta_text}. This is a rough estimate and may not be exact.`:"";
   $("ptitle").textContent={running:"Working… you can leave this running",done:"Your 3D model is ready",failed:"That did not work",cancelled:"Cancelled"}[s.state]||"";
   if(s.state==="running"){setTimeout(poll,1500);return}
   busy=false;refreshGo();$("cancel").classList.add("hidden");
+  if(s.state==="done")$("eta").textContent="";
   if(s.state==="done"){$("openfile").classList.remove("hidden");$("openfolder").classList.remove("hidden");$("pmeta").textContent="Saved to "+s.result}
   if(s.state==="failed")$("perr").textContent=s.message;
   if(s.detail_note)$("pmeta").textContent+="  "+s.detail_note;

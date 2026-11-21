@@ -20,10 +20,10 @@ class Detail:
 
 
 DETAILS = {
-    1: Detail(1, "Quick preview", "Fast. Good for checking a capture worked.", 120, "low", "low", 0.2, 15000, 2048, 0),
-    2: Detail(2, "Standard", "A solid model for most captures.", 200, "medium", "medium", 1.0, 30000, 4096, 4),
-    3: Detail(3, "High", "Sharper surfaces and textures. Takes a good while.", 320, "high", "high", 3.0, 50000, 4096, 6),
-    4: Detail(4, "Maximum", "The most detail Spirula can produce. Plan to leave it overnight.", 500, "high", "ultra", 10.0, 80000, 8192, 8),
+    1: Detail(1, "Quick preview", "Fastest. Checks your footage works.", 120, "low", "low", 0.2, 15000, 2048, 0),
+    2: Detail(2, "Standard", "Good for most footage.", 200, "medium", "medium", 1.0, 30000, 4096, 4),
+    3: Detail(3, "High", "Sharper detail. Takes longer.", 320, "high", "high", 3.0, 50000, 4096, 6),
+    4: Detail(4, "Maximum", "Best quality. Slowest.", 500, "high", "ultra", 10.0, 80000, 8192, 8),
 }
 
 
