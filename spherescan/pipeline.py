@@ -21,6 +21,8 @@ from .presets import DETAILS, FORMATS
 from .util import IS_WINDOWS, engine_env, find_executable, popen_flags
 
 WORK_MARKER = ".spherescan-work"
+OOM_ADVICE = ("What to do: close other programs that use the graphics card (games, video calls, other 3D or AI "
+              "apps, browsers with many tabs), then press Go again. Choosing a lower detail level also needs less memory.")
 # Seconds of silence from Spirula before the run is called stalled. Mapping and meshing can be quiet
 # for minutes; training prints a line every minute or so even on slow cards.
 STALL_AFTER = {"extract": 300, "sfm": 600, "train": 300, "mesh": 600}
@@ -62,6 +64,8 @@ class Job:
     ended: float = 0.0
     last_output: float = 0.0
     notice: str = ""
+    retries: int = 0
+    retry_info: dict = field(default_factory=dict)
     _mesh_w: float = -1.0
     _own_eta: Optional[float] = None
     _stage_t0: float = 0.0
@@ -102,7 +106,7 @@ class Job:
             return {"state": self.state, "stage": self.stage, "stage_label": est.STAGE_LABEL.get(self.stage, ""),
                     "stage_progress": self.stage_progress, "overall": self.overall, "message": self.message,
                     "result": self.result, "detail_note": self.detail_note, "eta_s": self.eta_s, "eta_text": human_left(self.eta_s), "desc": self.describe(),
-                    "health": self.health(), "idle_s": self.idle_s(), "notice": self.notice, "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
+                    "health": self.health(), "idle_s": self.idle_s(), "notice": self.notice, "retry": self.retry_info or None, "log": self.log[-60:], "elapsed": time.time() - self.started if self.started else 0,
                     "commands": self.commands if self.dry_run else []}
 
     # ---- internals ------------------------------------------------------
@@ -206,9 +210,19 @@ class Job:
                 why = "Out of graphics memory"
                 self._say(f"{why}. Starting again with less detail (step {step}).")
                 self.notice = f"{why}. Starting again with less detail."
+                nxt = memory.plan_at(detail, self.hw, step)
+                self.retries += 1
+                self.retry_info = {"n": self.retries, "of": memory.MAX_STEP - mplan.step, "kept_pct": round(nxt.kept * 100),
+                                   "max_resolution": nxt.max_resolution, "vram_gb": self.hw.usable_vram_gb if self.hw else None}
                 self.stage_progress, self._own_eta, self._stage_t0 = 0.0, None, time.time()
                 self.detail_note = memory.plan_at(detail, self.hw, step).note()
                 continue
+            if memory.looks_like_oom(self.log[mark:]):
+                vram = self.hw.usable_vram_gb if self.hw else None
+                raise StageError(
+                    "Your graphics card ran out of memory, even after SphereScan lowered the detail " +
+                    (f"{self.retries} time{'s' if self.retries != 1 else ''}. " if self.retries else "to its smallest setting. ") +
+                    (f"This card has about {vram:g} GB. " if vram else "") + OOM_ADVICE)
             tail = " | ".join(self.log[-4:])
             raise StageError(f"'{est.STAGE_LABEL['train']}' failed (exit code {rc}). {tail}")
 

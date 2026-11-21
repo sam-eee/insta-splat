@@ -112,7 +112,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:15px}
     <div class="steps" id="steps"></div>
     <div class="bar"><i id="barfill"></i></div>
     <div class="health" id="health"><span class="dot" id="dot"></span><span id="healthtxt"></span></div>
-    <div class="alert hidden" id="alert" role="alert"><b id="alerthead"></b><span id="alertbody"></span></div>
+    <div class="alert hidden" id="alert" role="alert"><b id="alerthead"></b><span id="alertbody"></span><div id="alerttip" class="small" style="margin-top:6px"></div></div>
     <div class="meta" id="pdesc"></div>
     <div class="meta" id="pmeta"></div>
     <div class="meta" id="eta"></div>
@@ -275,7 +275,8 @@ async function poll(){
 let lostNow=false;
 function paintHealth(s){
   const bar=$("barfill"),dot=$("dot"),txt=$("healthtxt"),al=$("alert");
-  const alert=(cls,head,body)=>{al.className="alert "+cls;$("alerthead").textContent=head;$("alertbody").textContent=body?" "+body:""};
+  const alert=(cls,head,body,tip)=>{al.className="alert "+cls;$("alerthead").textContent=head;$("alertbody").textContent=body?" "+body:"";$("alerttip").textContent=tip||""};
+  const MEMTIP="What you can do: close other programs that use the graphics card (games, video calls, other 3D or AI apps, browsers with many tabs). If it keeps happening, choose a lower detail level next time.";
   al.className="alert hidden";
   if(s.state==="running"){
     const idle=Math.round(s.idle_s||0);
@@ -287,12 +288,21 @@ function paintHealth(s){
       bar.className="run";dot.className="dot live";
       txt.textContent=s.health==="ok"?`Running normally · last update ${idle<5?"just now":idle<90?idle+" s ago":hm(idle)+" ago"}`:"Running";   // only claim "normally" when the app reports liveness
       $("cancel").classList.remove("primary");
-      if(s.notice)alert("",s.notice.startsWith("Out of")||s.notice.startsWith("Spirula expects")?"Adjusting to fit your graphics card.":"Heads up.",s.notice);
+      if(s.retry){
+        const r=s.retry;
+        alert("","Your graphics card ran out of memory, so SphereScan restarted this step with less detail.",
+          `That is automatic and nothing is lost except time. Restart ${r.n}: using about ${r.kept_pct}% of the usual detail points`+(r.max_resolution?` and pictures limited to ${r.max_resolution} px`:"")+(r.vram_gb?`, to fit your ${r.vram_gb} GB card.`:"."),MEMTIP);
+      }else if(s.notice){
+        alert("",s.notice.includes("run out of memory")?"Spirula warns your graphics card may run out of memory.":"Heads up.",
+          s.notice.includes("run out of memory")?"If it does, SphereScan restarts by itself with less detail. You do not need to do anything yet.":s.notice,
+          s.notice.includes("run out of memory")?MEMTIP:"");
+      }
     }
   }else if(s.state==="done"){bar.className="done";dot.className="dot";txt.textContent="Finished";}
   else if(s.state==="failed"){
     bar.className="bad";dot.className="dot bad";txt.textContent="Stopped";
-    alert("bad","The run stopped because of a problem.",s.message||"");
+    const i=(s.message||"").indexOf("What to do:");
+    alert("bad",i>=0?"The run stopped: not enough graphics memory.":"The run stopped because of a problem.",i>=0?s.message.slice(0,i).trim():(s.message||""),i>=0?s.message.slice(i):"");
     document.querySelector("#prog details").open=true;
   }
   else{bar.className="";dot.className="dot idle";txt.textContent="Cancelled";}

@@ -268,7 +268,8 @@ class Health(unittest.TestCase):
     def test_page_animates_only_while_healthy_and_highlights_problems(self):
         html = (Path(__file__).parent.parent / "spherescan" / "web" / "index.html").read_text()
         for needle in ("prefers-reduced-motion", 'id="alert"', 'role="alert"', "Running normally", "Lost contact with SphereScan",
-                       "No news from Spirula", "The run stopped because of a problem.", 'bar.className="run"', 'bar.className="stall"', 'bar.className="bad"'):
+                       "No news from Spirula", "The run stopped because of a problem.", "so SphereScan restarted this step with less detail",
+                       "What you can do: close other programs", "The run stopped: not enough graphics memory.", 'bar.className="run"', 'bar.className="stall"', 'bar.className="bad"'):
             self.assertIn(needle, html)
 
 
@@ -554,6 +555,10 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(caps, sorted(caps, reverse=True))
         self.assertLessEqual(caps[-1], 180000)
         self.assertIn("graphics card", job.snapshot()["detail_note"])
+        retry = job.snapshot()["retry"]                               # the page explains the restart from this
+        self.assertGreaterEqual(retry["n"], 1)
+        self.assertLess(retry["kept_pct"], 100)
+        self.assertEqual(retry["vram_gb"], 12.0)
 
     def test_real_failure_is_not_retried_forever(self):
         src = self.d / "in"
@@ -563,6 +568,9 @@ class Pipeline(unittest.TestCase):
         job = self.run_job(footage.scan_folder(str(src)))
         self.assertEqual(job.state, "failed")
         self.assertEqual(len([c for c in job.commands if c[1] == "train"]), memory.MAX_STEP + 1)
+        self.assertIn("ran out of memory", job.message)
+        self.assertIn("What to do: close other programs", job.message)
+        self.assertIn("12 GB", job.message)
 
     def test_a_scary_memory_forecast_is_shown_but_does_not_restart_the_run(self):
         # On the real RTX A500 run Spirula forecast a 97% chance of running out, and the run finished at full size.
