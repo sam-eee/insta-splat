@@ -95,21 +95,45 @@ jobs:
           python scripts/fetch_spirula_legal.py "$SP" /tmp/spirula-licences --save-source assets
           git archive --format=tar.gz -o "assets/spherescan-${{ github.ref_name }}-source.tar.gz" HEAD
           (cd assets && sha256sum *.zip *.tar.gz > SHA256SUMS.txt)
-      - name: Publish release
+      - name: Check the tag matches the app's version
         run: |
+          TAG="${{ github.ref_name }}"
+          WANT=$(echo "${TAG#v}" | sed 's/-alpha\./a/; s/-beta\./b/; s/-rc\./rc/')
+          HAVE=$(python -c "import spherescan; print(spherescan.__version__)")
+          [ "$WANT" = "$HAVE" ] || { echo "Tag $TAG means version $WANT, but the app says $HAVE"; exit 1; }
+      - name: Publish release (0.x versions are published as beta pre-releases)
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
           SP=$(tr -d '\r\n ' < SPIRULA_VERSION)
+          PRE=""; LABEL="$VERSION"
+          case "$TAG" in
+            *-beta*|*-alpha*|*-rc*) PRE="--prerelease";;
+            v0.*) PRE="--prerelease"; LABEL="$VERSION (beta)";;
+          esac
           cat > notes.md <<NOTES
-          ## SphereScan ${{ github.ref_name }}
-          Download the file for your system, unzip, and double-click. Nothing else to install.
+          ## SphereScan $LABEL
+          **This is a beta.** It works, but expect rough edges. It has been tested on Linux. The Windows and macOS builds are built automatically and have **not been tried on real computers yet**: please report what happens.
+
+          ### Download
+          | Your computer | File |
+          |---|---|
+          | Windows | \`SphereScan-windows.zip\` |
+          | Mac (Apple silicon, M1 or newer) | \`SphereScan-macos.zip\` |
+          | Linux (64-bit) | \`SphereScan-linux.zip\` |
+
+          Unzip anywhere and open SphereScan. It is **portable**: it keeps its settings in a \`SphereScan-data\` folder next to the app (delete \`portable.txt\` for a normal install). Nothing else to install, but you need a graphics card with an up-to-date driver, and Chrome, Edge or a similar browser.
+
+          The app is not signed yet, so your computer will warn you the first time: on Windows choose *More info*, then *Run anyway*; on a Mac right-click the app and choose *Open*.
 
           ### Open source (GPLv3)
           These apps bundle an **unmodified** copy of [Spirula Studio $SP](https://github.com/harry7557558/spirula-studio/releases/tag/$SP) (GPLv3).
-          - Source for this SphereScan release: \`spherescan-${{ github.ref_name }}-source.tar.gz\` (attached)
+          - Source for this SphereScan release: \`spherescan-$TAG-source.tar.gz\` (attached)
           - Source for the bundled Spirula Studio: \`spirula-studio-$SP-source.tar.gz\` (attached)
           - Licences: \`THIRD_PARTY.md\` and the *Licences and source code* link in the app.
           - Spirula's own notes warn of third-party patent exposure for H.264/H.265 decoding; see \`THIRD_PARTY.md\`.
-          - \`spirula-asset-*.sha256\` list the checksums of the official Spirula downloads we bundled.
+          - \`SHA256SUMS.txt\` lists checksums for the files below; \`spirula-asset-*.sha256\` for the official Spirula downloads we bundled.
           NOTES
           sed -i 's/^          //' notes.md
-          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes-file notes.md assets/* \
-            || gh release upload "${{ github.ref_name }}" assets/* --clobber
+          gh release create "$TAG" $PRE --title "SphereScan $LABEL" --notes-file notes.md assets/* \
+            || gh release upload "$TAG" assets/* --clobber

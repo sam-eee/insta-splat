@@ -447,6 +447,21 @@ class AppWindow(unittest.TestCase):
                 self.assertFalse(window.remove_launcher())
 
 
+class Version(unittest.TestCase):
+    def test_package_and_pyproject_agree_and_are_a_beta(self):
+        import re
+        import spherescan
+        root = Path(__file__).parent.parent
+        m = re.search(r'^version = "([^"]+)"', (root / "pyproject.toml").read_text(), re.M)
+        self.assertEqual(m[1], spherescan.__version__)
+        self.assertTrue(spherescan.__version__.startswith("0."))
+
+    def test_release_workflow_marks_0x_tags_as_prereleases_and_checks_the_tag(self):
+        wf = (Path(__file__).parent.parent / ".github" / "workflows" / "release.yml").read_text()
+        for needle in ("--prerelease", "v0.*", "Check the tag matches the app's version", "(beta)"):
+            self.assertIn(needle, wf)
+
+
 class Readme(unittest.TestCase):
     def test_every_image_the_readme_shows_exists(self):
         import re

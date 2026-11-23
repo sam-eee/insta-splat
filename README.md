@@ -4,8 +4,9 @@ Turn footage from your 360° camera into a 3D model you can spin around.
 
 You choose a video, move a slider, and press **Go**. SphereScan does the rest.
 
-> **Early version.** Ready-made downloads are not published yet. Until they are, someone technical needs to set it up
-> (see the [developer notes](docs/DEVELOPERS.md)). Everything below describes how it works once it is running.
+> **Beta.** SphereScan is new and still rough around the edges. Download it from the
+> [Releases page](https://github.com/sam-eee/spherescan/releases) (choose your system, unzip, open). It has been tested on Linux;
+> the Windows and Mac downloads are untested so far, so please report what happens.
 
 ## What it looks like
 

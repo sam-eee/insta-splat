@@ -4,4 +4,4 @@ A thin wrapper around an unmodified Spirula Studio binary. Every Spirula flag
 lives in recipe.py, so an upstream change is a one-file fix.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.0b1"
